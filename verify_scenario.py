@@ -327,9 +327,12 @@ async def main() -> None:
                   and p.resource.startswith("ext-buy"))]
         spend = sum(p.amount for p in LEDGER.proofs
                     if p.payer_wallet == f"research-agent@{BOT}")
+        # 외부 판매은 이제 x402 창구를 타므로 resource 가 요청 경로다.
+        # (예전엔 "ext-buy:..." 직접 이체였다)
         earned = sum(p.amount for p in LEDGER.proofs
                      if p.payee_wallet == f"revenue-wallet@{BOT}"
-                     and p.resource.startswith(("ext-buy", "settle")))
+                     and (p.resource.startswith(("ext-buy", "settle"))
+                          or "/sell/" in p.resource))
         record("B3", "판매 수익이 인지비용을 충당",
                earned >= spend and earned > 0,
                f"판매·정산으로 번 돈  {earned:>10,} µUSDC\n"

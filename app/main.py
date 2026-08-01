@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import time
 import uuid
 
 import httpx
@@ -33,10 +34,10 @@ from app.core.receipts import RECEIPTS
 from app.core.scheduler import SCHEDULER
 from app.core import store as STORE
 from app.core.x402_client import (BudgetExceeded, KillSwitchActive,
-                                  PaymentFailed, paid_fetch)
+                                  PaymentFailed, SpendTracker, paid_fetch)
 from app.core.x402_provider import paywall_dynamic
 from app.external import router as mock_router, spot
-from app.models import Rulebook, Signal, Thesis
+from app.models import Rulebook, Signal, SpendPolicy, Thesis
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="Cognitive Economy v2 — self-funding trading bots")
@@ -67,6 +68,23 @@ if _restored["bots"]:
 SIGNALS: dict[str, Signal] = {}
 THESES: dict[str, Thesis] = {}
 BASE = "http://testserver"
+
+# 외부 구매자 — 우리 시스템 밖의 에이전트를 대리한다.
+#
+# [2026-08] 예전에는 external-sale 단계가 LEDGER.transfer 직접 호출이었다.
+# "외부가 우리 판단을 x402로 사간다"고 주장하면서 정작 402를 안 탔다.
+# 이제 같은 페이월(/bots/{id}/sell/thesis/{id})을 통과한다 —
+# 402 챌린지 → 정책 검사 → 결제 → 증빙 첨부 재요청 → 증빙 1회성 소비.
+# 실제 서비스에서는 남의 서버가 이 자리에 오지만, 밟는 경로는 동일하다.
+#
+# 한도를 크게 잡는 이유: 이건 '외부 세계'의 지갑이라 우리 봇의 인지예산
+# 정책을 적용받지 않는다. 봇의 한도는 research-agent 쪽에 걸려 있다.
+EXTERNAL_BUYER = SpendTracker(
+    wallet="external",
+    policy=SpendPolicy(daily_cap=10**15, per_decision_cap=10**15,
+                       session_expires_at=int(time.time()) + 86_400),
+    auto_renew_seconds=86_400,
+)
 
 
 # ── 예외 → HTTP ─────────────────────────────────────────────────────
@@ -247,10 +265,22 @@ async def bot_cycle(bot_id: str, _: None = Depends(require_operator)):
         log.append({"step": "analyst", "ticker": thesis.ticker,
                     "side": thesis.side, "confidence": thesis.confidence})
 
-        # 외부 에이전트의 테제 구매 (모의)
-        ext = await LEDGER.transfer("external", bot.w("revenue-wallet"),
-                              config.PRICE_THESIS, f"ext-buy:{thesis.thesis_id}")
-        log.append({"step": "external-sale", "amount": ext.amount})
+        # 외부 에이전트가 우리 테제를 x402로 구매한다.
+        # 직접 이체가 아니라 판매 창구를 그대로 통과한다 —
+        # 402 → 정책검사 → 결제 → 증빙 첨부 재요청 → 증빙 1회성 소비.
+        #
+        # 판매가 실패해도 사이클을 멈추지 않는다. 안 팔린 것이지 판단이
+        # 틀린 게 아니다. 영수증이 불완전하면(degraded) 창구가 409로
+        # 거절하는데, 그건 우리가 의도한 동작이다.
+        EXTERNAL_BUYER.begin_decision()
+        try:
+            _, ext_proof = await paid_fetch(
+                client, f"{BASE}/bots/{bot_id}/sell/thesis/{thesis.thesis_id}",
+                EXTERNAL_BUYER)
+            log.append({"step": "external-sale", "via": "x402",
+                        "amount": ext_proof.amount if ext_proof else 0})
+        except (PaymentFailed, BudgetExceeded, KillSwitchActive) as e:
+            log.append({"step": "external-sale", "blocked": str(e)[:140]})
 
         # [3] 만다트 1: 인지비용 보충
         rep = await client.post(f"{BASE}/bots/{bot_id}/replenish")
