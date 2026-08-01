@@ -1,0 +1,62 @@
+# 우리 봇의 판단을 x402로 판매하는 게이트웨이 설정
+#
+# [무엇을 하는가]
+# pay server가 이 파일을 읽어 우리 API(:8100) 앞에 결제 문을 세운다.
+# 남의 에이전트가 우리 시그널을 사려면 반드시 USDC를 내야 한다.
+#
+# [실행]
+#   1) 우리 백엔드 먼저:  py -3.13 -m uvicorn app.main:app --port 8100
+#   2) 결제 게이트웨이:   pay server start provider.yml
+#   3) 구매 테스트:       pay --sandbox fetch http://127.0.0.1:1402/bots/bot1/sell/signal/<id>
+#
+# [주의] forward_url이 우리 백엔드를 가리켜야 한다.
+#        게이트웨이(1402)가 결제를 받고 → 우리 서버(8100)로 넘긴다.
+
+name: cognitive-economy
+subdomain: cognitive-economy
+title: "Cognitive Economy — Self-Funding Trading Agents"
+description: "룰북 기반 자율 투자 에이전트가 생성한 시그널과 투자 테제. 온체인 영수증으로 트랙레코드 검증 가능."
+category: ai_ml
+version: v1
+forward_url: http://127.0.0.1:8100
+accounting: pooled
+
+endpoints:
+  # ── 무료: 봇 목록·성적표 (구매 전 실사용) ───────────────────
+  # 사는 쪽이 "이 봇 적중률이 얼마지?"를 먼저 볼 수 있어야
+  # 유료 시그널을 살지 판단할 수 있다. 이 무료 라우트가 곧 신뢰 장치.
+  - method: GET
+    path: "bots"
+    description: "봇 목록, 적중률, 자급자족 여부"
+
+  - method: GET
+    path: "bots/{bot_id}/state"
+    description: "봇 상세 — 룰북, 잔고, 성과 통계"
+
+  # ── 유료: 시그널 ($0.05) ────────────────────────────────────
+  # Scout가 뉴스에서 뽑아낸 원시 시그널.
+  # 우리 config.PRICE_SIGNAL = 50_000 마이크로USDC 와 동일.
+  - method: POST
+    path: "bots/{bot_id}/sell/signal/{signal_id}"
+    description: "티커·헤드라인·신규성·관련성 점수"
+    metering:
+      dimensions:
+        - direction: usage
+          unit: requests
+          scale: 1
+          tiers:
+            - price_usd: 0.05
+
+  # ── 유료: 테제 ($0.20) ──────────────────────────────────────
+  # Gemini 심층추론 결과. 단, 매매 방향(side)과 규모는 마스킹된
+  # 공개본만 나간다 (models.py의 for_sale()). 알파 유출 방지.
+  - method: POST
+    path: "bots/{bot_id}/sell/thesis/{thesis_id}"
+    description: "종목별 확신도와 근거 (방향·규모는 지연 공개)"
+    metering:
+      dimensions:
+        - direction: usage
+          unit: requests
+          scale: 1
+          tiers:
+            - price_usd: 0.20

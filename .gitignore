@@ -1,0 +1,15 @@
+# 비밀키 — 절대 커밋 금지
+wallets/
+*.keypair.json
+
+# 런타임 상태 (봇·영수증·포지션 복원용). 비밀은 없지만 환경마다 다르다.
+state/
+
+# 파이썬 부산물
+__pycache__/
+*.pyc
+
+# provider.yml 은 제외하지 않는다.
+# 비밀이 없고(이름·subdomain·forward_url·가격표뿐) 판매 게이트웨이 설계를
+# 보여주는 제출 자산이다. 예전에 setup_wallets.py 가 자동으로 여기 넣었다.
+
