@@ -37,6 +37,34 @@ py -3.13 deploy/pack_secrets.py      # → deploy/secrets.tar.gz (약 61KB)
 > ⚠️ `secrets.tar.gz` 는 개인키를 담고 있다. git·채팅·메일로 보내지 말 것.
 > 서버에 올릴 때는 `scp` 나 호스팅 업체의 파일/시크릿 기능을 쓴다.
 
+### `.env` 파일 없이 환경변수로만 줘도 됩니다
+
+호스팅 업체의 **Environment / Secrets** 화면에 넣는 방식이 더 안전합니다.
+`app/config.py` 가 `os.environ.setdefault` 로 읽으므로, 이미 설정된
+환경변수가 `.env` 파일보다 **우선**합니다.
+
+```
+INFERENCE_MODE=byok
+GEMINI_API_KEY=...
+GEMINI_FLASH_MODEL=gemini-3.1-flash-lite
+GEMINI_DEEP_MODEL=gemini-3.1-flash-lite
+KIS_APP_KEY=...
+KIS_APP_SECRET=...
+KIS_ENV=real
+ALPHAVANTAGE_API_KEY=...
+LEDGER_MODE=devnet
+PYTHONIOENCODING=utf-8
+```
+
+실측 확인(2026-08-03): `.env` 를 지우고 위 값들을 환경변수로만 줘서 기동했더니
+`{"inference_live":true,"quotes_live":true}` 가 나왔습니다. 즉 배포 묶음에서
+`.env` 는 빼도 되고, **지갑(`wallets/`)만 있으면** 됩니다.
+
+> ⚠️ Gemini 무료 티어는 **분당 호출 제한**이 있습니다. 심사위원 여러 분이
+> 동시에 대화하시면 429 가 나고 그 답변은 '원장 기반 응답' 으로 내려갑니다
+> (화면이 그 사실을 표시합니다). 시연이 몰릴 예정이라면 결제 계정으로
+> 올려두시는 편이 안전합니다.
+
 ---
 
 ## 2. Docker 로 띄우기

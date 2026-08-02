@@ -206,3 +206,33 @@
   border-right: 2px solid #fff;
   transform: rotate(45deg) translate(-1px, 1px);
 }
+
+/* AI 연결 상태 — 대화 중에 실추론인지 모의 판단인지 즉시 보여준다. */
+.liveRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--up) !important;
+  font-weight: 600;
+}
+
+.liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--up);
+  animation: pulseDot 1.6s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liveDot {
+    animation: none;
+  }
+}

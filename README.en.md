@@ -2,7 +2,7 @@
 
 **Google Cloud × Solana AI Agentic Hackathon · Track A (Agent-Initiated Commerce)**
 
-[한국어](README.md) · [Verification](VERIFICATION.md) · [Work log](WEB-STATUS.md) · [Deployment](deploy/README.md)
+**[For reviewers](JUDGE.md)** · [한국어](README.md) · [Verification](VERIFICATION.md) · [Work log](WEB-STATUS.md) · [Deployment](deploy/README.md)
 
 ---
 

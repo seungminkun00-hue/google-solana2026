@@ -117,7 +117,19 @@ export function BotChat() {
         <BotAvatar size={47} />
         <div className={s.who}>
           <p className={s.name}>{head?.profile.display_name || id}</p>
-          <p className={s.model}>{head?.profile.model ?? ''}</p>
+          {/* 지금 진짜 모델이 답하는지 한눈에.
+              '추론 mock' 배지를 화면 아래에서 찾아야만 알 수 있으면,
+              대화 중에는 그게 실추론인지 알 방법이 없다. */}
+          {head?.ai.live ? (
+            <p className={`${s.model} ${s.liveRow}`}>
+              <span className={s.liveDot} aria-hidden />
+              {head.ai.model_id} · 실시간 연결됨
+            </p>
+          ) : (
+            <p className={s.model}>
+              {head ? `${head.profile.model} · 모의 판단` : ''}
+            </p>
+          )}
         </div>
         {head && <span className={s.badge}>{head.badge}</span>}
         <button
