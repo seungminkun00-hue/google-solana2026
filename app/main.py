@@ -66,6 +66,12 @@ app.include_router(ui_router)
 from app.judge import router as judge_router  # noqa: E402
 app.include_router(judge_router)
 
+# 소유자 전용 관제(app/owner.py). OWNER_TOKEN 을 준 배포에서만 라우트를
+# 등록한다 — 안 준 배포에서는 경로 자체가 없어서 404 가 난다.
+if os.environ.get("OWNER_TOKEN", "").strip():
+    from app.owner import router as owner_router  # noqa: E402
+    app.include_router(owner_router)
+
 # [2026-08-02] 기동할 때 데모봇(bot1~3)을 자동으로 만들지 않는다.
 #
 # 심사위원이 앱을 열었을 때 남이 만든 봇 세 개가 이미 있으면, 직접 봇을
