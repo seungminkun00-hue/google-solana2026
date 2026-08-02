@@ -22,3 +22,8 @@ deploy/_stage/
 
 # 프론트 빌드 산출물. Docker 가 직접 빌드하므로 저장소에 둘 이유가 없다.
 web/dist/
+
+# 발표 자료 — deploy/make_deck.py 로 언제든 다시 만든다.
+# 사업 내용(타깃·수익모델)이라 공개 저장소에 올릴지는 그때 정한다.
+Cognitive-Economy-*.pptx
+~$*.pptx
