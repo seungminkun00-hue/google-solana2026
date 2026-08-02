@@ -31,11 +31,17 @@ def effective_mode(declared: str, sources: dict[str, str]) -> tuple[str, bool]:
 
     폴백 자체는 유지한다 — 추론 하나 못 받았다고 데모가 죽으면 안 된다.
     바꾸는 것은 '폴백했다는 사실을 숨기지 않는다'는 것뿐이다.
+
+    [2026-08-02 — byok 추가]
+    실추론 모드가 둘이 됐다. managed 는 pay.sh 게이트웨이가 "gemini-live"
+    라고 답하고, byok 는 실제로 답한 모델 ID("gemini-3.1-flash-lite" 등)를
+    답한다. 어느 쪽이든 판정 기준은 같다 — **하나라도 mock 이 섞였으면
+    저하된 것**이다. 폴백은 source 에 "mock" 으로 남으므로 그것만 보면 된다.
     """
-    if declared != "managed":
+    if declared not in ("managed", "byok"):
         return declared, False
-    if sources and all(v == "gemini-live" for v in sources.values()):
-        return "managed", False
+    if sources and all(v and v != "mock" for v in sources.values()):
+        return declared, False
     return "degraded", True
 
 
@@ -75,11 +81,19 @@ class ReceiptStore:
             # 출처를 공개하는 것만으로는 부족하다 — 뒷받침 못 하는 물건은
             # 애초에 팔지 않는 것이 이 시스템의 주장과 맞다.
             #
-            # 대가: managed 모드에서 Gemini가 실패하면 그 사이클의 테제는
+            # 대가: 실추론 모드에서 Gemini가 실패하면 그 사이클의 테제는
             # 안 팔린다. 매매 자체는 그대로 진행되고(폴백 판단으로),
             # 기본 데모 경로(INFERENCE_MODE=mock)는 mode가 "mock"이라
             # 영향이 없다. 즉 시연이 멈추지는 않는다.
-            receipt_complete=(mode != "byok" and not degraded),
+            #
+            # [2026-08-02 교정] 예전 조건은 `mode != "byok" and not degraded`
+            # 였다. byok 를 통째로 판매 불가로 본 것인데, 그러면 **모의 판단은
+            # 팔리고 진짜 Gemini 판단은 못 파는** 뒤집힌 규칙이 된다.
+            # 게다가 x402 결제는 어느 모드에서든 똑같이 온체인에 남는다
+            # (결제 경로와 추론 백엔드는 독립 축이다 — app/inference.py).
+            # 판매 가능성의 기준은 '무슨 키를 썼나'가 아니라 '영수증이
+            # 실제 추론을 뒷받침하는가' 하나다.
+            receipt_complete=not degraded,
         )
         self.receipts[r.receipt_id] = r
         return r
@@ -119,8 +133,12 @@ class ReceiptStore:
 
     # ── 봇 성적표: MVoT의 입력이자 판매 신뢰의 근거 ────────────────
     def stats(self, bot_id: str, window: int = 100) -> dict:
+        # 사람이 직접 시킨 주문은 뺀다. 이 성적표는 **에이전트의** 판단
+        # 적중률이고, 만다트가 그걸 보고 추가 투입을 심사한다.
+        # 사용자가 대화로 시킨 매매의 손익이 섞이면 심사 근거가 오염된다.
         settled = [r for r in self.receipts.values()
-                   if r.bot_id == bot_id and r.settled_at is not None][-window:]
+                   if r.bot_id == bot_id and r.settled_at is not None
+                   and not r.manual][-window:]
         n = len(settled)
         if n < config.COLD_START_SAMPLES:
             return {"hit_rate": config.COLD_HIT_RATE,

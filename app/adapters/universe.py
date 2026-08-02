@@ -63,12 +63,26 @@ def load(force: bool = False) -> dict:
 
 
 def is_tracked(ticker: str) -> bool:
-    """이 종목이 실제 SEC 내부자 추적 대상인가.
+    """이 종목을 룰북에 넣어도 되는가.
 
-    룰북 검증에 쓴다. 사용자가 존재하지 않는 종목을 넣으면
-    봇이 영원히 아무것도 못 사는데, 그 사실을 미리 알려줄 수 있다.
+    사용자가 존재하지 않는 종목을 넣으면 봇이 영원히 아무것도 못 사는데,
+    그 사실을 미리 알려줄 수 있다.
+
+    [2026-08-03] 기준이 둘이 됐다.
+      ① smartmoney.market SEC 추적 목록 (미국 종목)
+      ② 우리 시장 카탈로그 (app/core/markets.py)
+    ②가 필요한 이유는 코스피·코스닥·도쿄 종목이 SEC 목록에 없기 때문이다.
+    그 종목들은 KIS 로 시세가 실제로 오고 devnet 에 민트도 있는, 즉
+    **살 수 있는 것이 증명된** 종목이다. SEC 목록에 없다고 막으면
+    국내장이 통째로 막힌다.
     """
     sym = ticker[:-1] if ticker.endswith("x") else ticker
+    try:
+        from app.core.markets import QUOTE_SPEC
+        if sym in QUOTE_SPEC or sym.upper() in QUOTE_SPEC:
+            return True
+    except Exception:                                     # noqa: BLE001
+        pass
     try:
         return sym in load()["stocks"]
     except Exception:
@@ -76,7 +90,20 @@ def is_tracked(ticker: str) -> bool:
 
 
 def company_name(ticker: str) -> str:
+    """사람이 읽는 종목명.
+
+    국내·일본 종목은 SEC 목록에 없다. 시장 카탈로그가 KIS 에서 받아둔
+    이름(삼성전자·에코프로비엠 …)을 먼저 본다 — 화면에 종목코드만
+    뜨면 무엇을 샀는지 알 수 없다.
+    """
     sym = ticker[:-1] if ticker.endswith("x") else ticker
+    try:
+        from app.core.markets import NAMES
+        hit = NAMES.get(sym) or NAMES.get(sym.upper())
+        if hit and hit != sym:
+            return hit
+    except Exception:                                     # noqa: BLE001
+        pass
     try:
         return load()["stocks"].get(sym, sym)
     except Exception:

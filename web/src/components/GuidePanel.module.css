@@ -1,0 +1,188 @@
+/* 아이폰 목업 옆 진행 안내.
+   폭은 JudgePanel 의 .panel(400px)과 같게 맞춘다 — 탭으로 갈아끼우는
+   자리라 폭이 다르면 탭을 바꿀 때마다 폰이 움직인다. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: none;
+  width: 400px;
+  max-height: 88svh;
+  overflow-y: auto;
+  padding: 22px;
+  background: var(--surface);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-nav);
+}
+
+@media (max-width: 1149px) {
+  .panel {
+    max-height: none;
+  }
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  font-family: var(--font-ui);
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.sub {
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+
+.bar {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--track);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  border-radius: var(--r-pill);
+  transition: width 300ms ease;
+}
+
+.count {
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step {
+  display: flex;
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+}
+
+/* 지금 할 단계만 눈에 띄게 한다. 전부 강조하면 아무것도 강조되지 않는다. */
+.step[data-state='now'] {
+  background: var(--brand-weak);
+  border-color: rgba(0, 70, 255, 0.18);
+}
+
+.step[data-state='todo'] {
+  opacity: 0.62;
+}
+
+.num {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-num);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--track);
+}
+
+.step[data-state='now'] .num {
+  background: var(--brand);
+}
+
+.step[data-state='done'] .num {
+  background: var(--up);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.stepTitle {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.action {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-strong);
+}
+
+.why {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-sub);
+}
+
+.finished {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-strong);
+  background: var(--brand-weak);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.env {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.env dt {
+  color: var(--text-muted);
+}
+
+.env dd {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.foot {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* 다른 탭으로 보내는 버튼. 안내가 "저 탭으로 가세요" 라고만 하고
+   찾는 건 사람에게 맡기면 거기서 흐름이 끊긴다. */
+.jump {
+  align-self: flex-start;
+  margin-top: 4px;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+}

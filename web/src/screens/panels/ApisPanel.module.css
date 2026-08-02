@@ -1,0 +1,383 @@
+/* Figma node 1:869 — API 탭 */
+
+.wrap {
+  padding: 17px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card {
+  margin: 0 13px;
+  padding: 16px 18px 18px;
+  border-radius: var(--r-card);
+  background: var(--surface-nav);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardTitle {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Figma 1:967 — 제목 옆 개수 뱃지 */
+.count {
+  display: inline-flex;
+  align-items: center;
+  height: 13px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #f1f4fe;
+  color: #5471ab;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.addBtn,
+.allBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  color: var(--brand);
+  font-size: 13.4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ── 4지표 ────────────────────────────────────────────── */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 16px;
+}
+
+.stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+}
+
+.stats > div + div {
+  border-left: 1px solid var(--divider);
+}
+
+.stats dt {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.stats dd {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.note,
+.priceNote {
+  margin-top: 14px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--label-mini);
+}
+
+.priceNote {
+  font-family: var(--font-num);
+}
+
+/* ── 연결된 API 행 (Figma 1:961) ──────────────────────── */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  margin-top: 16px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: 1px solid #f1f2f2;
+  border-radius: 10px;
+}
+
+.rowIcon {
+  flex: none;
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowName {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+/* Figma 1:965 — 회색 태그 칩 */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 13px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #f1f4fe;
+  color: #5471ab;
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Figma 1:993 — Pay.sh 는 그라디언트 칩 */
+.paysh {
+  display: inline-flex;
+  align-items: center;
+  height: 13px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to right,
+    #bd46eb 0%,
+    #738ec9 51.923%,
+    #74e2b1 100%
+  );
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rowNum {
+  flex: none;
+  width: 68px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.rowNum + .rowNum {
+  border-left: 1px solid var(--divider);
+  padding-left: 8px;
+}
+
+.rowPct {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.empty {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+/* ── 추천 API ─────────────────────────────────────────── */
+.reco {
+  padding: 6px 0 0;
+}
+
+.recoHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+}
+
+.recoTitle {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.recoSub {
+  padding: 4px 18px 0;
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+/* 가로 스크롤은 이 목록 안에서만 일어난다 — 페이지 본문은 밀리지 않는다 */
+.carousel {
+  display: flex;
+  gap: 11px;
+  margin-top: 12px;
+  padding: 0 13px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.recoCard {
+  flex: none;
+  width: 160px;
+  min-height: 129px;
+  padding: 12px;
+  border-radius: var(--r-card);
+  background: var(--surface-nav);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recoTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recoName {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.recoDesc {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-sub);
+  word-break: keep-all;
+}
+
+.adapter {
+  font-family: var(--font-num);
+  font-size: 9px;
+  color: var(--label-mini);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Figma 1:1012 — 연결하기 버튼 */
+.connect {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  margin-top: auto;
+  border: 1px solid #f1f2f2;
+  border-radius: 12px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.connectOff {
+  color: var(--label-mini);
+}
+
+.state {
+  padding: 40px 22px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-sub);
+}
+
+.err {
+  color: var(--down);
+}
+
+/* ── 최근 결제 내역 ────────────────────────────────────────
+   한 행 = 호출 하나 = 결제 하나 = 온체인 서명 하나. */
+.calls {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.call {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: var(--bg);
+  font-size: 11.5px;
+}
+
+.callMain {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.callName {
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model,
+.modelMock {
+  flex: none;
+  font-family: var(--font-num);
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+}
+
+.model {
+  background: var(--brand-weak);
+  color: var(--brand);
+}
+
+/* 폴백한 호출은 다르게 보여야 한다 — 실추론이라고 오해하면 안 된다. */
+.modelMock {
+  background: var(--chip-bg);
+  color: var(--text-sub);
+}
+
+.callAmt {
+  flex: none;
+  color: var(--text-sub);
+}
+
+.callTx {
+  flex: none;
+  width: 92px;
+  text-align: right;
+  color: var(--brand);
+  text-decoration: none;
+  font-family: var(--font-num);
+}
+
+.callTx:hover {
+  text-decoration: underline;
+}
+
+.callNoTx {
+  flex: none;
+  width: 92px;
+  text-align: right;
+  color: var(--text-muted);
+}

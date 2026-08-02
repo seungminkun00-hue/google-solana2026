@@ -37,6 +37,20 @@ ALLOWED_ROLE_ROUTES: set[tuple[str, str]] = {
     ("external", "market"),                # 모의 유동성
     ("invest-wallet", "market"),           # 스왑 원금 유출
     ("market", "invest-wallet"),           # 청산 대금 유입
+    # ── 심사위원 시연 경로 (2026-08) ──────────────────────────────
+    # judge-wallet 은 **우리가 개인키를 갖지 않는** 외부 지갑이다.
+    # 여기서 나가는 이체는 심사위원이 위임(approve)한 한도 안에서만,
+    # delegated_transfer() 로만 가능하다.
+    ("external", "judge-wallet"),          # 시연용 테스트 USDC 지급
+    ("judge-wallet", "user-treasury"),     # 심사위원 예치 (위임 인출)
+    # 정산 회수 — 심사위원이 넣은 돈이 **자기 지갑으로** 돌아오는 경로.
+    #
+    # ⚠️ ("user-treasury", "external") 은 여전히 금지다. 그게 audit.py 6번이
+    #    검증하는 '사용자 원금 유출 차단'이고, 그 성질은 그대로 남는다.
+    #    다른 점은 목적지가 임의의 외부가 아니라 **그 돈을 넣은 본인 지갑**
+    #    이라는 것이다. 넣은 사람에게 돌려주는 것은 유출이 아니라 출금이고,
+    #    이게 없으면 "매도해서 정산했다"를 화면 밖에서 확인할 방법이 없다.
+    ("user-treasury", "judge-wallet"),     # 매도 정산 후 심사위원에게 반환
 }
 
 

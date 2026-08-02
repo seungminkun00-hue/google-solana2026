@@ -1,161 +1,330 @@
-# Cognitive Economy v2 — Managed 자율결제 투자봇
+# Cognitive Economy — 스스로 벌어서 스스로 쓰는 투자 에이전트
 
-Google Cloud × Solana AI Agentic Hackathon / Track A
+**Google Cloud × Solana AI Agentic Hackathon · Track A (Agent-Initiated Commerce)**
 
-**검증 결과: mock 23/23 · devnet 25/25 통과** → [VERIFICATION.md](VERIFICATION.md)
-(재현: `py -3.13 verify_scenario.py`)
+[English](README.en.md) · [검증 결과](VERIFICATION.md) · [작업 현황](WEB-STATUS.md) · [배포 안내](deploy/README.md)
 
-## 한 문장
-사용자가 룰북(헌법)으로 봇을 만들면, 봇은 x402 페이월에서 뉴스·추론을
-구매해 판단하고, 그 판단을 다른 봇에게 판매해 인지비용을 자급하며,
-돈이 부족하면 스스로 청구서를 발행해 만다트 정책이 자동 승인·거절하고,
-수익은 생성 시점에 박제된 비율로 원자적으로 분배된다.
+---
 
-## 트랙 3요건 → 코드 (이중 충족)
-| 요건 | 만다트 1 (인지비용) | 만다트 2 (매매자금) |
+## 한 문장으로
+
+사용자가 **시장**만 정해 주면, 봇이 뉴스와 추론을 **직접 결제해서 사고**,
+그 판단으로 주식을 **실제로 매매하며**, 자기가 쓴 인지비용을 **스스로 벌어
+충당**하는 시스템입니다. 사람이 서명하는 순간은 **처음 한 번**뿐입니다.
+
+---
+
+## 무엇이 진짜로 동작하는지
+
+가장 중요하게 지킨 원칙은 **"화면에 뜨는 숫자는 전부 실제 기록에서 나온다"**
+입니다. 목업 숫자는 하나도 남아 있지 않습니다.
+
+| 영역 | 실제로 무엇을 쓰는가 |
+|---|---|
+| **결제** | Solana **devnet** — API 호출 한 건마다 온체인 트랜잭션 한 건 |
+| **시세** | **한국투자증권 KIS OpenAPI** — 국내·해외 실시간 현재가 |
+| **추론** | **Google Gemini** — 매수·매도 판단을 실제 모델이 내립니다 |
+| **뉴스** | Alpha Vantage — 대화 중 종목을 물으면 당일 기사를 받아 옵니다 |
+| **환율** | open.er-api.com — 원화·엔화 표시가 실시간 환율로 환산됩니다 |
+
+꺼져 있을 때는 화면이 그 사실을 숨기지 않습니다. 추론이 실패해 모의 판단으로
+내려가면 배지가 `모의 판단`으로 바뀌고, 그 판단으로 만든 영수증은 **판매가
+거부**됩니다.
+
+### 거래 가능한 시장 — 미러 주식 토큰 76종
+
+| 시장 | 종목 수 | 예 |
 |---|---|---|
-| 결제요청 생성 | research가 인보이스 발행 | invest가 인보이스 발행 |
-| 입금 | revenue→research 자동승인 | treasury→invest 자동승인 |
-| 거절 조건 | ROI·주간한도·재원 | **성과하한 40%·노출한도** |
+| 🇰🇷 코스피 | 19 | 삼성전자 · SK하이닉스 · 현대차 |
+| 🇰🇷 코스닥 | 20 | 에코프로비엠 · 알테오젠 · 레인보우로보틱스 |
+| 🇺🇸 나스닥 | 19 | AAPL · MSFT · NVDA · META |
+| 🇯🇵 도쿄 | 18 | 토요타 · 소니 · 닌텐도 |
 
-정산: 실현손익을 영수증에 박제된 비율(85/10/5)로 `transfer_many` 원자 분배.
-devnet에서 수취인 3명이 **같은 트랜잭션 시그니처를 공유**하는 것으로 증명됨
-([VERIFICATION.md](VERIFICATION.md) A3b).
+devnet에 SPL 토큰으로 발행한 **미러 주식**입니다. 코인으로 사기 때문에
+**환전 없이 네 나라 주식을 같은 지갑에서** 살 수 있다는 점이 이 구조의
+값어치이고, 화면 곳곳에 국기를 붙여 그것을 드러냈습니다.
 
-## 30초 안내 — 어디부터 보면 되나
+종목 목록은 손으로 적지 않았습니다. `check_markets.py` 가 KIS로 한 종목씩
+실제 조회해 **시세가 오는 것만** 남기고, `mint_markets.py` 가 그 결과대로
+민트를 발행합니다. 시세와 민트가 **둘 다 있어야** 거래 가능으로 표시됩니다.
+
+---
+
+## 핵심 기술
+
+### 1. x402 — HTTP 402 기반 종량 결제
+
+에이전트가 데이터를 살 때마다 결제합니다. 구독이 아니라 **호출당 결제**입니다.
+
+```
+요청 → 402 챌린지(가격·수취인) → 정책 검사 → 온체인 결제
+     → 증빙 첨부 재요청 → 증빙 1회성 소비 → 데이터
+```
+
+증빙은 **리소스에 묶이고 한 번만 쓰입니다.** 같은 증빙으로 다른 엔드포인트를
+찌르거나 재사용하는 것이 코드로 막혀 있고, 감사 스크립트가 그것을 매번
+확인합니다.
+
+### 2. 룰북 — 헌법은 코드입니다
+
+사용자가 정한 규칙(허용 시장·확신도 하한·1회 투입 상한·손절·익절·일일 한도)이
+**최종 거부권**을 가집니다. 모델이 확신도를 아무리 높게 불러도 하한에 못
+미치면 체결은 일어나지 않습니다.
+
+> 다만 **소유자가 대화로 직접 지시한 주문**은 예외입니다. 룰북은 에이전트의
+> 자율 판단에 걸리는 규칙이지, 본인의 수동 주문까지 막으라는 뜻은 아니기
+> 때문입니다. 그런 체결은 영수증에 `manual` 로 구분해 기록하고, 에이전트의
+> 적중률 통계에서는 제외합니다.
+
+### 3. 만다트 — 자동 승인과 자동 거절
+
+봇은 돈이 필요하면 **스스로 청구서를 발행**하고, 정책이 자동으로 심사합니다.
+
+| | 인지비용 만다트 | 매매자금 만다트 |
+|---|---|---|
+| 청구 | research-agent → revenue-wallet | invest-wallet → user-treasury |
+| 거절 조건 | ROI 하한 · 주간 한도 · 재원 부족 | **적중률 40% 미만** · 총 노출 한도 |
+
+거절이 실제로 일어난다는 점이 중요합니다. 자동이체가 아니라 **심사**입니다.
+
+### 4. 영수증 — 증명 가능성이 곧 판매 가능성
+
+모든 판단에 영수증이 남습니다. 어떤 뉴스를 봤고, 어떤 모델이 답했고, 결제
+증빙이 무엇인지가 들어갑니다. **선언한 모드가 아니라 실제로 답한 모델**이
+기록되므로, 폴백이 일어나면 영수증이 그것을 드러내고 그 판단은 팔리지 않습니다.
+
+### 5. 위임 — 사람의 서명은 한 번뿐입니다
+
+SPL `approve` 로 한도를 위임하면, 그 뒤의 인출·결제·매매를 에이전트가
+**추가 서명 없이** 집행합니다. 자동이체 신청서와 같은 구조이고, 한도를 넘는
+인출은 체인이 거부합니다. 백지수표가 아니라는 점을 화면에서 확인하실 수 있습니다.
+
+### 6. 세션 격리
+
+브라우저마다 세션 ID를 발급해 봇과 지갑을 묶습니다. 같은 링크를 여러 분이
+동시에 여셔도 서로의 봇이 보이지 않고, 관리자 토큰을 알아도 남의 봇은 만질
+수 없습니다.
+
+---
+
+## 화면
+
+Figma 디자인 6화면을 그대로 옮겨 실제 백엔드에 붙였고, 데스크톱에서는
+아이폰 목업 안에서 동작합니다.
+
+- **도입부** iOS 홈 화면 → 스플래시 → 앱 (은행 앱 안에 들어갔을 때를 가정)
+- **홈** 총자산 · 봇 카드 · 충전하기
+- **봇 상세** AI 요약 리포트 · 자산 추이 · 보유 비중 / 거래 내역 / API 결제 내역
+- **대화** 봇에게 묻고 주문도 시킬 수 있습니다 (주식 외 주제는 답하지 않습니다)
+- **봇 설정** 시장 · 프롬프트 · 룰북. 저장된 AI 지침 원문을 보실 수 있습니다
+
+오른쪽에는 **진행 안내**와 **실행 로그**가 항상 떠 있어, 처음 보시는 분도
+순서대로 따라가며 무엇이 일어나는지 확인하실 수 있습니다.
+
+---
+
+## 실행에 필요한 것
+
+### 준비물
+
+| 항목 | 용도 | 없으면 |
+|---|---|---|
+| Python 3.13 | 백엔드 | 필수 |
+| Node.js 22 | 프론트 빌드 | 필수 |
+| **Solana devnet 지갑 + SOL** | 온체인 결제·수수료 | devnet 모드 기동 불가 |
+| **Gemini API 키** | 실제 추론 | 모의 판단으로 동작 |
+| **KIS appkey + appsecret** | 실시간 시세 | 내장 기준가로 동작 |
+| Alpha Vantage 키 (선택) | 대화 중 뉴스 | 뉴스 없이 답변 |
+
+> KIS 키는 [KIS Developers](https://apiportal.koreainvestment.com) 에서
+> 발급받으실 수 있습니다. **appkey와 appsecret이 모두 필요**하며, 접근 토큰은
+> 1분에 한 번만 발급되므로 파일에 캐시합니다.
+
+### 환경변수 (`.env`)
+
+```ini
+INFERENCE_MODE=byok
+GEMINI_API_KEY=...
+GEMINI_FLASH_MODEL=gemini-3.1-flash-lite
+GEMINI_DEEP_MODEL=gemini-3.1-flash-lite
+
+KIS_APP_KEY=...
+KIS_APP_SECRET=...
+KIS_ENV=real
+
+ALPHAVANTAGE_API_KEY=...
+```
+
+### 처음 한 번
 
 ```powershell
 py -3.13 -m pip install -r requirements.txt
 
-py -3.13 verify_scenario.py   # ★ 여기부터. 25개 항목을 실행으로 증명 (15초)
-py -3.13 audit.py             # 보안 감사 9항목 (1초)
-py -3.13 test_cycle.py        # 봇 3개 사이클 로그를 눈으로 (1초)
+py -3.13 setup_wallets.py       # devnet 지갑 생성
+py -3.13 bootstrap_devnet.py    # USDC·미러 토큰 발행, 초기 자금 배분
+py -3.13 check_markets.py       # KIS로 종목 검증
+py -3.13 mint_markets.py        # 검증된 종목의 미러 토큰 발행
 ```
 
-주장이 어느 코드에 있는지:
+devnet SOL은 [faucet.solana.com](https://faucet.solana.com) 에서 받으실 수
+있습니다. 수수료 지불자 지갑 하나에만 있으면 됩니다.
 
-| 주장 | 파일 · 함수 |
+### 실행
+
+```powershell
+# ① 백엔드
+$env:LEDGER_MODE="devnet"; $env:PYTHONIOENCODING="utf-8"
+py -3.13 -m uvicorn app.main:app --port 8100
+
+# ② 프론트
+cd web; npm install; npm run dev      # → http://localhost:5173
+```
+
+> `PYTHONIOENCODING=utf-8` 이 없으면 콘솔 인코딩(cp949) 때문에 기동 로그에서
+> 멈춥니다. 윈도우에서 자주 겪는 부분이라 미리 말씀드립니다.
+
+### 모드 스위치
+
+세 축이 서로 독립입니다. 하나를 바꾸셔도 나머지는 그대로입니다.
+
+```powershell
+$env:INFERENCE_MODE="byok"      # 추론: 사용자 Gemini 키 (권장)
+$env:INFERENCE_MODE="mock"      # 추론: 모의 판단 (키 없이도 동작)
+
+$env:LEDGER_MODE="devnet"       # 원장: 실제 SPL 이체
+$env:LEDGER_MODE="mock"         # 원장: 메모리
+
+$env:PRICE_SOURCE="kis"         # 시세: 한국투자증권 실시세 (기본)
+$env:PRICE_SOURCE="mock"        # 시세: 내장 기준가 (검증 스크립트가 쓰는 값)
+```
+
+---
+
+## 검증
+
+주장을 글이 아니라 **실행으로** 증명합니다.
+
+```powershell
+py -3.13 verify_scenario.py    # 시나리오 전 과정
+py -3.13 audit.py              # 보안 감사
+```
+
+| 검증 | 결과 |
 |---|---|
-| 자기 생각값을 스스로 벌어 지불한다 | `core/routes.py` `ALLOWED_ROLE_ROUTES` (원금→인지비용 경로가 아예 없다)<br>`core/mandate.py` `CognitiveMandate.process()` |
-| 신용카드가 아니라 한도 있는 법인카드 | `core/x402_client.py` `SpendTracker.check()` (결정당·일일)<br>`core/spend_guard.py` `SpendGuard` (mainnet 총액)<br>`core/mandate.py` 거절 3종 |
-| 증명 가능성이 곧 판매 가능성 | `core/receipts.py` `effective_mode()` (폴백을 숨기지 않는다)<br>`main.py` `sell_thesis()` (`receipt_complete`가 거짓이면 판매 거부) |
-| 정산의 원자성 + 멱등성 | `adapters/devnet_ledger.py` `transfer_many()` · `_send_tx()` |
+| `verify_scenario.py` (mock) | **23 통과 / 0 실패** / 2 미해당 |
+| `verify_scenario.py` (devnet) | **25 통과 / 0 실패** |
+| `audit.py` | **9항목 전부 통과** |
+
+증명하는 것 중 일부입니다.
+
+- 사용자 원금이 인지비용으로 새는 경로가 **아예 없습니다**
+- 결제 증빙을 재사용하거나 다른 창구에 쓰면 **거부**됩니다
+- 정산 분배 3건이 **하나의 온체인 트랜잭션**을 공유합니다
+- 확정 조회가 실패해도 이체는 **한 번만** 집행됩니다
+- 서버를 재시작해도 봇과 자금이 **살아남습니다**
+
+항목별 증거는 [VERIFICATION.md](VERIFICATION.md) 에 정리해 두었습니다.
+
+---
 
 ## 구조
 
 ```
-                사용자
-                  │ POST /bots (룰북 + 예치금)
-                  ▼
-    ┌─────────────────────────────┐
-    │  BotInstance (봇 하나)       │   지갑 4개가 역할별로 격리된다
-    │                             │
-    │  user-treasury   원금 보관   │◀────────┐ 정산 85%
-    │       │ 자본 만다트(청구·승인)│         │
-    │       ▼                     │         │
-    │  invest-wallet   매매 자금   │─────────┤ 정산 10%
-    │       │ swap_in/out         │         │
-    │       ▼                     │         │
-    │    [market] 미러 주식 토큰   │         │
-    │                             │         │
-    │  revenue-wallet  판매 수익   │◀────────┘ 정산 5%
-    │       │ 인지 만다트(청구·승인)│
-    │       ▼                     │
-    │  research-agent  인지 예산   │  0에서 시작 — 인보이스로만 조달
-    │       │ x402 결제            │
-    └───────┼─────────────────────┘
-            ▼
-    뉴스 · Flash · Deep · 시세 · 다른 봇의 시그널
-```
-
-```
 app/
-  config.py        가격표·정책 상수·모드 스위치
-  models.py        Rulebook·Invoice·DecisionReceipt·Thesis
-  bots.py          BotInstance (봇별 지갑4·정책·만다트2) + 데모봇 3
-  inference.py     결제 경로 라우팅 (X402_MODE)
-  external.py      모의 402 세계 (Exa·Flash·Deep·시세)
-  pricing.py       실측 단가 기반 토큰 비용 계산
-  main.py          FastAPI 라우트 + 인증
+  main.py            매매·정산·수동주문 · 프론트 서빙
+  ui.py              앱 화면 전용 API (/ui/*) — 자금 경로에 관여하지 않습니다
+  judge.py           지갑 위임 시연 (/judge/*)
+  agents/pipeline.py 정찰 → 분석 → 체결
   core/
-    routes.py        역할 기반 경로 화이트리스트 ★ 원금 보호의 핵심
-    ledger.py        mock 원장 + 통화량 불변식
-    proofs.py        증빙 1회성 소비 (재사용·교차사용 차단)
-    x402_client.py   paid_fetch (402→정책→결제→재요청, 실패시 롤백)
-    x402_provider.py paywall (봇별 동적 수취)
-    mandate.py       CognitiveMandate·CapitalMandate (주간 한도 롤오버)
-    receipts.py      영수증·앵커·정산·stats + 추론 출처 정직성
+    routes.py        지갑 경로 화이트리스트  ← 자금 유출을 막는 지점
+    mandate.py       청구서 심사 (자동 승인·거절)
+    receipts.py      영수증 · 정산 분배 · 추론 출처 정직성
     positions.py     포지션 장부 + 룰북 청산 판정
-    scheduler.py     무인 순회 + 연속 실패 자동 정지
-    spend_guard.py   mainnet 총액 상한 (마지막 방어선)
-    store.py         재시작 생존 (봇·영수증·포지션 복원)
+    markets.py       시장 카탈로그 (검증된 종목만)
+    session.py       브라우저별 격리
+    prompts.py       룰북 → AI 지침
+    journal.py       체결·자산추이·API호출 기록
+    store.py         재시작 생존
   adapters/
-    devnet_ledger.py  실제 SPL 이체 — 원자적 정산 + 멱등 재전송
-    gemini_live.py    Gemini mainnet 실결제 (pay CLI 경유)
-    live_quotes.py    실시간 시세 (pay.sh MPP)
-    universe.py       SEC 추적 종목 1,045개 검증
-    paysh_client.py   MPP 402 챌린지 해독기 (실측 기록)
-verify_scenario.py   전체 시나리오 검증 — A~E 25항목
+    devnet_ledger.py Solana devnet 원장 (원자적 정산·멱등 재전송)
+    kis_quotes.py    한국투자증권 실시세
+    gemini_byok.py   Gemini 추론
+    news.py          종목 뉴스
+    fx.py            환율
+web/                 React + TypeScript (Vite)
 ```
 
-## 실행
+봇 하나의 지갑은 역할별로 넷으로 나뉘고, 그 사이를 오갈 수 있는 경로가
+화이트리스트로 고정되어 있습니다.
+
+```
+user-treasury   원금 보관   ◀──────┐ 정산 85%
+     │ 자본 만다트                 │
+     ▼                            │
+invest-wallet   매매 자금   ───────┤ 정산 10%
+     │ swap_in/out                │
+     ▼                            │
+  [market] 미러 주식 토큰          │
+                                  │
+revenue-wallet  판매 수익   ◀──────┘ 정산 5%
+     │ 인지 만다트
+     ▼
+research-agent  인지 예산   0에서 시작 — 인보이스로만 조달됩니다
+     │ x402 결제
+     ▼
+뉴스 · 스크리닝 · 심층추론 · 시세 · 다른 봇의 시그널
+```
+
+`user-treasury → research-agent` 경로는 **존재하지 않습니다.** 사용자 원금이
+API 비용으로 새는 일이 구조적으로 불가능하고, 감사가 그것을 확인합니다.
+
+---
+
+## 배포
+
+FastAPI가 API와 화면을 **함께** 서빙하므로 서비스 하나로 끝납니다.
+자세한 절차는 [deploy/README.md](deploy/README.md) 를 봐 주시면 감사하겠습니다.
 
 ```powershell
-py -3.13 -m uvicorn app.main:app --port 8100
-# 브라우저 → http://127.0.0.1:8100/docs
-# ① POST /demo/seed          (x-admin-token: dev-token)
-# ② POST /bots/bot2/cycle    (x-admin-token: dev-token)
-# ③ GET /bots  /  GET /bots/bot2/state   (인증 불필요)
+py -3.13 deploy/pack_secrets.py    # 지갑·키를 묶음으로 (git에 올리지 않습니다)
+docker build -t cognitive-economy .
 ```
 
-**인증**: 자금이 움직이는 라우트(`/cycle` `/replenish` `/settle` `/close-all`
-`/manage-positions`)는 `X-Admin-Token` 이 필요하다. 조회 라우트(`/bots`,
-`/bots/{id}/state`, `/state`)와 판매 창구(`/sell/...`, x402 결제로 보호)는
-그대로 열려 있다. 내부 파이프라인(스케줄러 등)은 프로세스마다 새로 만드는
-1회용 내부 토큰으로 통과하므로 관리자 토큰을 들고 다니지 않는다.
+주의하실 점 세 가지만 미리 말씀드립니다.
 
-## 모드 스위치 (시연 사고 방지)
+1. **워커는 하나여야 합니다.** 봇과 포지션이 프로세스 메모리에 있습니다.
+2. **`wallets/` 는 영구 볼륨에 두셔야 합니다.** 사라지면 devnet 자금은 남았는데
+   그것을 움직일 키가 없어집니다.
+3. **HTTPS가 필요합니다.** 팬텀 지갑은 보안 컨텍스트에서만 주입됩니다.
 
-세 축이 서로 독립이다. 하나를 바꿔도 나머지는 그대로다.
+---
 
-```powershell
-$env:INFERENCE_MODE="mock"      # 추론: 모의 판단 (기본, 항상 작동)
-$env:INFERENCE_MODE="managed"   # 추론: 실제 Gemini에 mainnet 결제
+## 솔직하게 밝혀 두는 한계
 
-$env:LEDGER_MODE="mock"         # 원장: 메모리 (기본)
-$env:LEDGER_MODE="devnet"       # 원장: 실제 SPL 이체
+- **미러 주식 토큰**입니다. 실제 주식 체결이 아니라 devnet에 발행한 SPL
+  토큰이며, 시세만 실제입니다. 국내 자본시장법상 정리되지 않은 영역이라
+  의도적으로 이렇게 두었고, 실체결은 어댑터 교체로만 활성화됩니다.
+- **사이클 뉴스의 헤드라인은 모의값**입니다. 종목명과 티커는 실제(KIS·SEC
+  확인)이지만 헤드라인 문장은 생성한 것입니다. 대화 중 받아오는 기사는 실제입니다.
+- **세션 격리는 로그인이 아닙니다.** 세션 ID를 훔쳐 쓰면 그 사람 행세를 할 수
+  있습니다. 심사 링크용 격리이며, 실서비스에는 서버 세션과 인증이 필요합니다.
+- **관리자 토큰이 브라우저 번들에 들어갑니다.** 데모 구성입니다. 실제 보호는
+  세션 격리가 담당합니다.
+- **출금 경로가 없습니다.** 봇을 삭제해도 잔액은 그 봇의 지갑에 남습니다.
+  사용자 원금 유출을 막는 규칙과 같은 이유이며, 화면이 이 사실을 삭제 직전에
+  그대로 알립니다. (연결한 지갑으로의 정산 회수는 별도 경로로 열려 있습니다.)
+- **신한은행 리포트·토스 종토방**은 화면의 추천 API 목록에 있지만 **아직
+  붙지 않았습니다.** 어댑터도 제휴도 없는 구상 단계이며, 목록에서 `준비 중`
+  으로 표시됩니다.
 
-$env:PRICE_SOURCE="mock"        # 시세: 내장 기준가 (기본)
-$env:PRICE_SOURCE="live"        # 시세: pay.sh MPP 라우트
-```
+---
 
-`INFERENCE_MODE=managed` 는 결제 경로를 바꾸지 않는다. 내장 x402 페이월을
-그대로 쓰면서 그 안의 추론만 진짜 Gemini로 바꾼다.
+## 함께 보시면 좋은 문서
 
-`X402_MODE=paysh` (결제 경로를 외부 pay.sh 게이트웨이로) 는 **아직 쓸 수
-없다.** 켜면 명시적 예외로 막힌다 — 남은 작업 목록은 `app/inference.py`
-주석에 있다. 예전에는 이 축이 `INFERENCE_MODE` 에 묶여 있어서
-"진짜 Gemini를 켜면 진짜 Gemini를 안 부르는" 자기모순이 있었다.
-
-## 두 네트워크를 쓰는 이유
-
-```
-mainnet : Gemini 추론 결제    ← 게이트웨이가 강제 (localnet/devnet 불가)
-devnet  : 봇 지갑·정산·미러 주식 ← 우리가 통제. 원자성·멱등성·불변식을 증명
-```
-
-**원장 안의 모든 송금은 devnet 자체 민트 하나로 닫혀 있다.** mainnet 결제는
-`pay` CLI가 별도 지갑으로 내며 원장을 거치지 않는다. 두 통화를 잇는 브리지는
-없고, `config.PRICE_*` 를 실측 단가에 맞춰 조정해 devnet 경제가 mainnet
-비용을 모사한다. 자세한 한계는 [VERIFICATION.md](VERIFICATION.md) 5절.
-
-## v2에서 새로 된 것
-- 멀티봇: 봇별 지갑·정책·킬스위치 격리 (bot1 정지가 bot2에 무영향)
-- 룰북 2중 방어: 사전필터(뉴스값 2원에서 차단) + 체결 게이트
-- 2단계 모델: Flash 스크리닝 → 통과분만 Deep
-  (실측 단가 기준 $0.000158 vs $0.005674 — **36배 차이**)
-- 만다트 2종: 성과 나쁘면 사용자 돈 추가투입이 실제로 거절됨
-- hit_rate/avg_return이 상수가 아니라 정산 영수증 집계 (콜드스타트 보호)
-- 봇 간 시그널 거래: bot2가 bot1 시그널을 devnet USDC로 실제 구매
-- **정산 멱등성**: 재시도가 분배를 두 번 집행하던 결함을 찾아 수정 (실측 증명)
-- **재시작 생존**: 봇·영수증·포지션이 프로세스를 넘어 복원
+| 문서 | 내용 |
+|---|---|
+| [VERIFICATION.md](VERIFICATION.md) | 검증 25항목의 실행 증거 |
+| [WEB-STATUS.md](WEB-STATUS.md) | 개발 중 마주친 문제와 해결 과정 (시간순) |
+| [web/README.md](web/README.md) | 화면 구현 상세 |
+| [deploy/README.md](deploy/README.md) | 배포 절차 |
+| [AUDIT.md](AUDIT.md) | 보안 감사 항목 |

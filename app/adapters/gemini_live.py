@@ -129,6 +129,23 @@ def analyze(ticker: str, headline: str) -> dict:
             "rationale": str(data.get("rationale", ""))[:200]}
 
 
+# ── 자유 대화 (앱의 '대화하기' 탭) ──────────────────────────────────
+def converse(prompt: str, max_tokens: int = 220) -> str:
+    """다듬은 문장 하나를 받는다. 싼 모델을 쓴다.
+
+    이 경로가 판단을 만들지 않는다는 점이 중요하다. 호출하는 쪽
+    (app/ui.py:bot_chat)이 원장·저널에서 뽑은 사실을 프롬프트에 넣고,
+    여기서는 그 사실을 문장으로 정리만 한다. 그래서 이 응답은
+    영수증의 대상이 아니고, 매매에도 영향을 주지 않는다.
+    """
+    return _call(FLASH, prompt, max_tokens=max_tokens,
+                 est_cost=flash_cost(prompt))
+
+
+async def converse_async(prompt: str, max_tokens: int = 220) -> str:
+    return await asyncio.to_thread(converse, prompt, max_tokens)
+
+
 async def screen_async(headline: str) -> float:
     return await asyncio.to_thread(screen, headline)
 

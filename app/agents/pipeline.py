@@ -49,7 +49,12 @@ def should_think(bot: BotInstance, novelty: float, relevance: float,
 async def scout_run(client: httpx.AsyncClient, base: str,
                     bot: BotInstance) -> tuple[Signal | None, dict]:
     bot.tracker.begin_decision()
-    news, p1 = await paid_fetch(client, route("exa_search", base), bot.tracker)
+    # 자기 룰북 범위로 검색을 좁힌다. 실제 Exa 질의도 종목을 한정해
+    # 던지므로 같은 모양이고, 이렇게 하지 않으면 종목이 76개인 지금
+    # 자기 시장 뉴스가 걸릴 확률이 너무 낮다(app/external.py 주석 참조).
+    news, p1 = await paid_fetch(
+        client, route("exa_search", base), bot.tracker,
+        {"tickers": sorted(bot.rulebook.allowed_tickers)})
 
     # 룰북 사전 필터 — 허용 목록 밖 종목이면 Flash조차 안 부른다.
     # 헌법이 지갑을 지키는 첫 지점: 여기서 걸리면 지출은 뉴스값 2원뿐.
@@ -92,10 +97,13 @@ async def analyst_run(client: httpx.AsyncClient, base: str, bot: BotInstance,
     # 시그널 구매 — 자기 봇 것이든 남의 봇 것이든 똑같이 돈을 낸다
     sig_data, p_sig = await paid_fetch(
         client, f"{base}/bots/{seller_bot_id}/sell/signal/{signal_id}", bot.tracker)
+    # bot_id 를 함께 보낸다. 추론 라우트는 결제자만 알 뿐 '누구의 지침으로
+    # 판단해야 하는지'는 모른다 — 봇마다 시스템 프롬프트가 다르므로
+    # (app/core/prompts.py) 그걸 고를 열쇠가 필요하다.
     deep, p_deep = await paid_fetch(
         client, route("gemini_deep", base), bot.tracker,
         {"novelty": sig_data["novelty"], "ticker": sig_data["ticker"],
-         "headline": sig_data["headline"]})
+         "headline": sig_data["headline"], "bot_id": bot.bot_id})
     quote, p_q = await paid_fetch(client, route("market_quote", base),
                                   bot.tracker, {"ticker": sig_data["ticker"]})
     collected += [p for p in (p_sig, p_deep, p_q) if p]

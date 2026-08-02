@@ -1,0 +1,32 @@
+{
+  "name": "web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "_why_node_paths": "이 리포지토리 경로에 '&' 가 들어 있다 (…\\Desktop\\google&solana\\…). npm 은 스크립트를 cmd.exe 로 실행하면서 node_modules\\.bin 을 PATH 앞에 붙이는데, cmd 가 '&' 를 명령 구분자로 읽어 PATH 가 잘린다. 그래서 'vite' 같은 shim 이름이 해석되지 않는다. 실행 파일을 node 로 직접 부르면 PATH 를 타지 않아 그 문제를 피한다. 폴더 이름에서 '&' 를 빼면 원래 스크립트로 되돌려도 된다.",
+  "scripts": {
+    "dev": "node node_modules/vite/bin/vite.js",
+    "build": "node node_modules/typescript/bin/tsc -b && node node_modules/vite/bin/vite.js build",
+    "typecheck": "node node_modules/typescript/bin/tsc -b --noEmit",
+    "lint": "node node_modules/oxlint/bin/oxlint",
+    "preview": "node node_modules/vite/bin/vite.js preview"
+  },
+  "dependencies": {
+    "@fontsource/space-grotesk": "^5.3.0",
+    "@solana/web3.js": "^1.98.4",
+    "buffer": "^6.0.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2",
+    "wanted-sans": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "oxlint": "^1.75.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0"
+  }
+}

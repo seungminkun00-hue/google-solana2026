@@ -30,6 +30,9 @@ class BotInstance:
     _trade_day: int = 0          # 일일 카운터를 리셋할 기준일
     killed: bool = False
     created_at: float = 0.0
+    # 이 봇을 만든 브라우저. 빈 값이면 공용(검증 스크립트·데모 시드).
+    # app/core/session.py 참조.
+    session: str = ""
 
     def __post_init__(self) -> None:
         self.created_at = self.created_at or time.time()

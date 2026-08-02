@@ -1,0 +1,87 @@
+/* Figma 파일 lAbnLgTnx9VfH45NmNQF6c 에서 뽑은 값.
+   숫자를 바꿀 일이 있으면 반드시 디자인과 함께 바꾼다. */
+
+:root {
+  /* ── 색 ───────────────────────────────────────────────── */
+  --bg: #eff4fb;
+  --surface: #ffffff;
+  --surface-nav: #fefeff;
+  --surface-translucent: rgba(255, 255, 255, 0.54);
+
+  --brand: #0046ff;
+  --brand-alt: #005eff;
+  --brand-weak: #e8effe;
+
+  --up: #13bf8d; /* 상승·이익 (node 1:622) */
+  --down: #ff2b2b; /* 하락·손실 (node 1:605 강조) */
+  --sell: #5f89f4; /* 거래내역 '매도' (node 1:819) */
+  --buy: #ea5460; /* 거래내역 '매수' (node 1:822) */
+
+  --text: #000000;
+  --text-strong: #191f28;
+  --text-muted: #8b8696;
+  --text-sub: #757d89;
+  --text-nav: #7e8ca4;
+  --text-chip: #647087;
+  --tab-inactive: #a59ba4; /* 봇 상세 비활성 탭 (node 1:565) */
+  --label-mini: #90949c; /* 9~10px 보조 라벨 (node 1:613) */
+
+  --chip-bg: #dfe7ef;
+  --divider: #f0f2f5;
+  --track: #d9dee7;
+
+  /* AI 워드마크 그라디언트 — Figma node 1:527 */
+  --ai-gradient: linear-gradient(
+    233.13deg,
+    #75e7af 14.706%,
+    #69a3c2 36.171%,
+    #758bca 49.7%,
+    #9a5ce1 67.094%,
+    #c540ed 88.235%
+  );
+
+  /* 도넛 계열 — Figma node 1:649~1:653 의 범례 색 그대로.
+   *
+   * ⚠️ 이 다섯 색은 파랑 한 계열의 명도 5단계다. 범주형 팔레트 검사를
+   *    돌리면 세 항목이 걸린다: 명도 밴드 이탈(#14317d 너무 어둡고
+   *    #8ed0ea 너무 밝음), 채도 하한 미달(#8ed0ea), 그리고 #00b7ff↔#6b85c9
+   *    가 정상 시야에서도 ΔE 14.1 로 붙어 있다(하한 15).
+   *    색각 이상 분리는 통과한다(ΔE 11.1 deutan).
+   *
+   *    디자인 원본이므로 기본값은 그대로 두되, 도넛 옆에 이름과 비율을
+   *    직접 적어 색만으로 구분하게 두지 않는다.
+   *    접근성을 우선하려면 아래 --series-* 를 --alt-series-* 값으로
+   *    바꾸면 된다 (검사 전 항목 통과, 색조를 넓힌 대신 톤이 달라진다).
+   */
+  --series-1: #0046ff;
+  --series-2: #6b85c9;
+  --series-3: #00b7ff;
+  --series-4: #14317d;
+  --series-5: #8ed0ea;
+
+  --alt-series-1: #0046ff;
+  --alt-series-2: #00a3d9;
+  --alt-series-3: #8b5cf6;
+  --alt-series-4: #0e9f6e;
+  --alt-series-5: #e8590c;
+
+  /* ── 모양 ─────────────────────────────────────────────── */
+  --r-card: 18px;
+  --r-tile: 25px;
+  --r-nav: 32px;
+  --r-badge: 4px;
+  --r-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-nav: 0 4px 20px rgba(30, 52, 96, 0.1);
+
+  /* ── 프레임 ───────────────────────────────────────────── */
+  --frame-w: 402px;
+
+  /* ── 글꼴 ─────────────────────────────────────────────── */
+  /* Space Grotesk 를 먼저 두는 이유: 디자인에서 숫자·영문은 이 글꼴이고
+     한글 글리프가 없어서 자동으로 Wanted Sans 로 넘어간다.
+     Figma가 렌더하는 방식과 같다. */
+  --font-num: 'Space Grotesk', 'Wanted Sans Variable', system-ui, sans-serif;
+  --font-ui: 'Wanted Sans Variable', 'Space Grotesk', system-ui, sans-serif;
+}

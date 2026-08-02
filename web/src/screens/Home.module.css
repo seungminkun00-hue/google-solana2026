@@ -1,0 +1,371 @@
+/* Figma node 1:429 — iphone-main */
+
+/* 상단 여백 74px 는 디자인 값이다 (제목이 프레임 기준 y=85).
+   상태바와 다이나믹 아일랜드가 차지하는 자리라 줄이면 안 된다 —
+   다른 화면들도 같은 74px 로 맞춰져 있다. */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 74px 21px 0;
+}
+
+.title {
+  font-family: var(--font-ui);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.2px;
+  flex: 1;
+}
+
+/* AI 워드마크 — Figma node 1:527 의 그라디언트 텍스트 */
+.ai {
+  background: var(--ai-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.searchChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 13px;
+  background: var(--chip-bg);
+  color: var(--text-chip);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.roundBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--text-chip);
+}
+
+/* ── 잔액 ─────────────────────────────────────────────── */
+.balance {
+  position: relative;
+  padding: 18px 21px 0;
+}
+
+.walletRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.walletBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand);
+  min-width: 0;
+}
+
+.walletName {
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.walletAddr {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: -0.12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flip {
+  transform: rotate(180deg);
+}
+
+.usdRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--text-sub);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.approx {
+  opacity: 0.8;
+}
+
+.usdcMark {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--up);
+  color: #fff;
+  font-family: var(--font-num);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.picker {
+  position: absolute;
+  left: 21px;
+  right: 21px;
+  top: 48px;
+  z-index: 30;
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(23, 41, 77, 0.18);
+  overflow: hidden;
+}
+
+.picker button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  text-align: left;
+}
+
+.picker button + button {
+  border-top: 1px solid var(--divider);
+}
+
+.picker li + li button {
+  border-top: 1px solid var(--divider);
+}
+
+.pickOn {
+  background: var(--brand-weak);
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.pickAddr {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-sub);
+  font-family: var(--font-num);
+}
+
+.total {
+  margin-top: 10px;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: clamp(30px, 11.7vw, 47px);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -1.2px;
+  white-space: nowrap;
+}
+
+.fxNote {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+/* ── 액션 3개 ─────────────────────────────────────────── */
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 18px 54px 0;
+}
+
+.action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 77px;
+  border-radius: var(--r-tile);
+  background: var(--surface-translucent);
+  color: var(--brand);
+  font-size: 13.6px;
+  font-weight: 500;
+}
+
+.action:active {
+  background: #fff;
+}
+
+/* ── 나의 봇 ──────────────────────────────────────────── */
+.botsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 26px 21px 0;
+}
+
+.sectionTitle {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 13px 4px 4px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--brand);
+  font-size: 13.4px;
+  font-weight: 500;
+  text-decoration: none;
+  backdrop-filter: blur(2px);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  padding: 13px 9px 0;
+}
+
+.card {
+  position: relative;
+  display: block;
+  height: 100%;
+  padding: 18px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--shadow-card);
+}
+
+.card:active {
+  transform: scale(0.985);
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-badge);
+  background: var(--brand);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.botName {
+  margin-top: 14px;
+  font-family: var(--font-num);
+  font-size: 17.9px;
+  font-weight: 700;
+  line-height: 26.8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.botModel {
+  font-family: var(--font-num);
+  font-size: 13.4px;
+  font-weight: 400;
+  line-height: 17.9px;
+  color: var(--text-muted);
+}
+
+.botValue {
+  margin-top: 28px;
+  text-align: right;
+  font-family: var(--font-ui);
+  font-size: 17.9px;
+  font-weight: 500;
+  line-height: 26.8px;
+}
+
+.change {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  font-family: var(--font-num);
+  font-size: 15.6px;
+  font-weight: 700;
+  line-height: 22.3px;
+}
+
+.up {
+  color: var(--up);
+}
+
+.down {
+  color: var(--down);
+}
+
+.flat {
+  color: var(--text-sub);
+}
+
+.noData {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-sub);
+}
+
+.paused {
+  position: absolute;
+  left: 18px;
+  bottom: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--down);
+}
+
+/* ── 상태 표시 ────────────────────────────────────────── */
+.state {
+  padding: 24px 21px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-sub);
+}
+
+.err {
+  color: var(--down);
+}
+
+.modes {
+  padding: 18px 21px 0;
+  text-align: center;
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--text-sub);
+  opacity: 0.75;
+}

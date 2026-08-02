@@ -1,0 +1,780 @@
+/* Figma node 1:1039 — AI 봇 설정 */
+
+.head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 74px 18px 22px;
+}
+
+.back {
+  position: absolute;
+  left: 22px;
+  bottom: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--text);
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+/* ── 섹션 ─────────────────────────────────────────────── */
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 10px;
+  padding: 0 25px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.sectionIcon {
+  display: inline-flex;
+  color: var(--brand);
+}
+
+.card {
+  margin: 0 13px;
+  padding: 18px;
+  border-radius: var(--r-card);
+  background: var(--surface-nav);
+}
+
+/* ── 기본 정보 ────────────────────────────────────────── */
+.nameRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.avatarWrap {
+  position: relative;
+  flex: none;
+  /* 이름 입력칸(36px)의 세로 가운데에 맞춘다 */
+  margin-top: 24px;
+}
+
+.camera {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--chip-bg);
+  color: var(--text-chip);
+}
+
+.fields {
+  flex: 1;
+  min-width: 0;
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.fieldLabel:not(:first-child) {
+  margin-top: 12px;
+}
+
+.fieldLabel em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--label-mini);
+}
+
+.inputPill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #f1f2f2;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.inputPill input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font-size: 14px;
+}
+
+.inputPill input::placeholder,
+.textareaWrap textarea::placeholder {
+  color: #b9bec7;
+}
+
+.counter {
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--label-mini);
+  flex: none;
+}
+
+.blockLabel {
+  display: block;
+  margin: 18px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.textareaWrap {
+  position: relative;
+  border: 1px solid #f1f2f2;
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 12px 22px;
+}
+
+.textareaWrap textarea {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: none;
+  resize: vertical;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.textareaWrap .counter {
+  position: absolute;
+  right: 12px;
+  bottom: 6px;
+}
+
+.hint {
+  margin-top: 10px;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--label-mini);
+  word-break: keep-all;
+}
+
+/* ── 칩 ───────────────────────────────────────────────── */
+.rowLabel {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rowLabel:not(:first-child) {
+  margin-top: 20px;
+}
+
+.rowLabel em {
+  font-style: normal;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--label-mini);
+}
+
+.chipWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.chip,
+.chipWide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 31.5px;
+  padding: 0 14px;
+  border: 1px solid #eceef2;
+  border-radius: 9px;
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.chipWide {
+  height: 32px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+  gap: 4px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.chipOn {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+/* ── 라벨 + 컨트롤 행 ─────────────────────────────────── */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  margin-top: 14px;
+}
+
+.row:first-child {
+  margin-top: 0;
+}
+
+.rowIcon {
+  display: inline-flex;
+  color: var(--brand);
+  flex: none;
+}
+
+.rowName {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.rowCtl {
+  margin-left: auto;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.select {
+  width: 100%;
+  max-width: 178px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #eceef2;
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+}
+
+/* ── 종목 콤보박스 ────────────────────────────────────── */
+.combo {
+  position: relative;
+  width: 100%;
+  max-width: 178px;
+}
+
+.comboList {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 30px;
+  z-index: 20;
+  max-height: 210px;
+  overflow-y: auto;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgba(23, 41, 77, 0.18);
+}
+
+.comboList button {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.comboList li + li button {
+  border-top: 1px solid var(--divider);
+}
+
+.comboList b {
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.comboList span {
+  font-size: 10.5px;
+  color: var(--text-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tokenWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* Figma 1:1157 — 선택된 값이 파란 토큰으로 남는다 */
+.token {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 23px;
+  padding: 0 5px 0 9px;
+  border-radius: 6px;
+  background: var(--brand-weak);
+  color: var(--brand);
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.token button {
+  display: inline-flex;
+  color: var(--brand);
+  opacity: 0.7;
+}
+
+.tokenEmpty {
+  font-size: 11px;
+  color: var(--label-mini);
+}
+
+/* ── 위험 성향 세그먼트 ───────────────────────────────── */
+.segment {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  width: 100%;
+  max-width: 256px;
+  height: 23px;
+  padding: 1px;
+  border-radius: 6px;
+  background: #eef1f6;
+}
+
+.seg {
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--label-mini);
+  white-space: nowrap;
+}
+
+.segOn {
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── 스테퍼 ───────────────────────────────────────────── */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #eceef2;
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stepper button {
+  display: inline-flex;
+  color: var(--text-chip);
+}
+
+/* '빼기'는 Figma에도 별도 벡터가 없다. 같은 + 아이콘을 45° 돌리면
+   획 하나가 세로가 되어 −처럼 보이므로, 그러지 않고 회전 없이
+   가로획만 남기도록 잘라 쓴다. */
+.minus {
+  clip-path: inset(42% 0 42% 0);
+}
+
+.qmark {
+  display: inline-flex;
+  color: var(--label-mini);
+  cursor: help;
+}
+
+/* ── 접히는 룰북 상세 ─────────────────────────────────── */
+.advanced {
+  margin-top: 18px;
+  border-top: 1px solid var(--divider);
+  padding-top: 12px;
+}
+
+.advanced summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand);
+  cursor: pointer;
+}
+
+.miniGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.mini {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--label-mini);
+}
+
+.mini input {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #eceef2;
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: var(--font-num);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+}
+
+/* ── 토글 ─────────────────────────────────────────────── */
+.toggleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.toggleRow + .toggleRow {
+  border-top: 1px solid var(--divider);
+}
+
+.toggleText {
+  flex: 1;
+  min-width: 0;
+}
+
+.toggleDesc {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--label-mini);
+  word-break: keep-all;
+}
+
+.switch {
+  position: relative;
+  width: 52px;
+  height: 25px;
+  border-radius: 13px;
+  background: var(--track);
+  flex: none;
+  transition: background 0.15s ease;
+}
+
+.switchOn {
+  background: var(--brand);
+}
+
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease;
+}
+
+.switchOn .knob {
+  transform: translateX(27px);
+}
+
+/* ── 제출 ─────────────────────────────────────────────── */
+.error {
+  margin: 14px 13px 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: #ffeef0;
+  color: var(--down);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.submitWrap {
+  padding: 22px 13px 8px;
+}
+
+.submit {
+  width: 100%;
+  height: 65px;
+  border-radius: var(--r-tile);
+  background: var(--brand);
+  color: #fff;
+  font-size: 21.4px;
+  font-weight: 600;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+}
+
+.deleteBtn {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px 0;
+  color: var(--down);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── 삭제 확인 시트 ───────────────────────────────────── */
+.sheetBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(15, 23, 42, 0.42);
+  animation: fade 0.14s ease;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.sheet {
+  width: 100%;
+  padding: 22px 20px 20px;
+  border-radius: 22px 22px 0 0;
+  background: var(--surface);
+  animation: rise 0.2s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(18px);
+  }
+}
+
+.sheetTitle {
+  font-size: 18px;
+  font-weight: 700;
+  word-break: keep-all;
+}
+
+.sheetBlock {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.sheetLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+.posList {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.posList li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-num);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.posList li span:first-child {
+  flex: 1;
+  font-weight: 700;
+}
+
+.sheetAmount {
+  margin-top: 4px;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.sheetWarn {
+  margin-top: 8px;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--down);
+  word-break: keep-all;
+}
+
+.sheetMeta {
+  margin-top: 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--label-mini);
+  word-break: keep-all;
+}
+
+.sheetActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.sheetCancel,
+.sheetConfirm {
+  height: 52px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sheetCancel {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.sheetConfirm {
+  background: var(--down);
+  color: #fff;
+}
+
+.sheetCancel:disabled,
+.sheetConfirm:disabled {
+  opacity: 0.55;
+}
+
+.up {
+  color: var(--up);
+}
+
+.down {
+  color: var(--down);
+}
+
+/* ── AI에게 저장된 지침 ───────────────────────────────────
+   설정 화면과 생성 완료 시트 양쪽에서 같은 모양으로 쓴다. */
+.aiBox {
+  margin-top: 10px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+}
+
+.aiBox > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+  list-style: none;
+}
+
+.aiBox > summary::-webkit-details-marker {
+  display: none;
+}
+
+.aiBox > summary::before {
+  content: '▸ ';
+  color: var(--text-muted);
+}
+
+.aiBox[open] > summary::before {
+  content: '▾ ';
+}
+
+.aiBox > summary em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.aiPrompt {
+  margin: 10px 0 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 11px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-family: var(--font-num);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-strong);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── 거래할 시장 ──────────────────────────────────────────
+   개별 종목 대신 장을 고른다. 거래할 수 없는 시장은 회색으로 두고
+   이유를 그 자리에 적는다 — 고를 수 있게 해놓고 아무것도 못 사면
+   화면이 거짓말을 하는 것이다. */
+.marketWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.market {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  cursor: pointer;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--divider);
+  background: var(--surface);
+}
+
+.market:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.marketOn {
+  border-color: var(--brand);
+  background: var(--brand-weak);
+}
+
+.marketName {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.marketMeta {
+  font-family: var(--font-num);
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+.marketDesc {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}

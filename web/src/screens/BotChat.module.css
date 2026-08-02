@@ -1,0 +1,208 @@
+/* Figma node 1:685 — 대화 화면.
+   하단 탭 대신 입력 도크가 자리를 차지한다. */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 74px 12px 18px 18px;
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: -4px;
+  color: var(--text);
+  flex: none;
+}
+
+.who {
+  min-width: 0;
+  flex: 1;
+}
+
+.name {
+  font-family: var(--font-num);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 26.8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model {
+  font-family: var(--font-num);
+  font-size: 13.4px;
+  line-height: 17.9px;
+  color: var(--text-muted);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-badge);
+  background: var(--brand);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  flex: none;
+}
+
+.gear {
+  display: inline-flex;
+  color: var(--text-strong);
+  flex: none;
+}
+
+/* ── 말풍선 ───────────────────────────────────────────── */
+.thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 8px 18px 24px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  max-width: 84%;
+}
+
+.theirs {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.mine {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.bubble {
+  padding: 14px 16px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: keep-all;
+}
+
+.theirs .bubble {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 18px 18px 18px 4px;
+}
+
+.mine .bubble {
+  background: var(--brand);
+  color: #fff;
+  border-radius: 18px 18px 4px 18px;
+}
+
+.pending {
+  opacity: 0.55;
+}
+
+.src {
+  margin-top: 4px;
+  font-size: 9.5px;
+  color: var(--label-mini);
+}
+
+/* ── 하단 도크 ────────────────────────────────────────── */
+.dock {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding: 10px 0 14px;
+  background: linear-gradient(
+    to bottom,
+    rgba(239, 244, 251, 0) 0%,
+    var(--bg) 22%
+  );
+  z-index: 6;
+}
+
+.chips {
+  display: flex;
+  gap: 8px;
+  padding: 0 18px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chips button {
+  padding: 9px 14px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.chips button:disabled {
+  opacity: 0.5;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 18px;
+  padding: 6px 6px 6px 18px;
+  border-radius: var(--r-pill);
+  background: #e3e8f0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 14.5px;
+  padding: 10px 0;
+}
+
+.input::placeholder {
+  color: #9aa3b2;
+}
+
+.sendBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex: none;
+}
+
+.sendBtn:disabled {
+  opacity: 0.4;
+}
+
+/* 보내기 화살표 — Figma에서도 벡터가 아니라 원 안의 화살표 도형이다 */
+.sendArrow {
+  width: 12px;
+  height: 12px;
+  border-top: 2px solid #fff;
+  border-right: 2px solid #fff;
+  transform: rotate(45deg) translate(-1px, 1px);
+}

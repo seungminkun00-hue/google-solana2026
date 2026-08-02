@@ -74,8 +74,10 @@ def save() -> None:
     진행 중인 거래를 중단시키면 더 나쁜 상태가 된다. 대신 시끄럽게 남긴다.
     """
     from app.bots import BOTS
+    from app.core.journal import JOURNAL
     from app.core.ledger import LEDGER
     from app.core.positions import BOOK
+    from app.core.profiles import PROFILES
     from app.core.receipts import RECEIPTS
 
     try:
@@ -97,11 +99,18 @@ def save() -> None:
                     "trades_today": b.trades_today,
                     "trade_day": b._trade_day,
                     "killed": b.killed,
+                    "session": getattr(b, "session", ""),
                 } for b in BOTS.values()],
                 "receipts": [r.model_dump(mode="json")
                              for r in RECEIPTS.receipts.values()],
                 "positions": [dataclasses.asdict(p) for p in BOOK.all()],
                 "anchors": RECEIPTS.anchors,
+                # 화면이 쓰는 기록. 잔고처럼 계산으로 복원할 수 없는
+                # '지나온 것'이라 여기 없으면 재시작마다 내역이 사라진다.
+                # 이 두 키는 나중에 추가됐으므로 load() 쪽에서 없어도
+                # 되게 다룬다 — 옛 상태 파일과 그대로 호환된다.
+                "journal": JOURNAL.dump(),
+                "profiles": PROFILES.dump(),
             })
     except Exception as e:                        # noqa: BLE001
         print(f"  ⚠️ 상태 저장 실패({STATE_PATH}): {str(e)[:120]}")
@@ -143,13 +152,15 @@ def load() -> dict:
     진실원으로 남고, 사용자 봇은 파일이 진실원이 된다.
     """
     from app.bots import BOTS, BotInstance
+    from app.core.journal import JOURNAL
     from app.core.ledger import LEDGER
     from app.core.positions import BOOK, Position
+    from app.core.profiles import PROFILES
     from app.core.receipts import RECEIPTS
     from app.models import DecisionReceipt, Rulebook
 
     out = {"bots": 0, "restored_bots": [], "receipts": 0, "positions": 0,
-           "ledger": False}
+           "ledger": False, "fills": 0, "profiles": 0}
 
     path = STATE_PATH
     if not path.exists():
@@ -205,7 +216,8 @@ def load() -> dict:
         if bot is None:
             bot = BotInstance(bot_id=b["bot_id"], owner=b["owner"],
                               rulebook=Rulebook(**b["rulebook"]),
-                              created_at=b.get("created_at", 0.0))
+                              created_at=b.get("created_at", 0.0),
+                              session=b.get("session", ""))
             BOTS[b["bot_id"]] = bot
             out["restored_bots"].append(b["bot_id"])
         bot.trades_today = b.get("trades_today", 0)
@@ -230,5 +242,13 @@ def load() -> dict:
             continue
         BOOK.open(Position(**p))
         out["positions"] += 1
+
+    # 저널·프로필은 나중에 추가된 키다. 없는 파일도 그대로 읽힌다.
+    if data.get("journal"):
+        JOURNAL.load(data["journal"])
+        out["fills"] = len(JOURNAL.fills)
+    if data.get("profiles"):
+        PROFILES.load(data["profiles"])
+        out["profiles"] = len(data["profiles"])
 
     return out

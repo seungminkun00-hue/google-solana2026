@@ -1,0 +1,208 @@
+/* 항상 오른쪽에 서 있는 실행 로그 기둥.
+   여기가 넓어야 트랜잭션 해시와 단계 태그가 줄바꿈 없이 읽힌다. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 420px;
+  min-width: 340px;
+  max-width: 560px;
+  height: 88svh;
+  padding: 18px;
+  background: var(--surface);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-nav);
+}
+
+@media (max-width: 1149px) {
+  .panel {
+    height: auto;
+  }
+
+  .log {
+    min-height: 280px;
+    max-height: 60svh;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+/* 지금 무언가 돌고 있다는 표시. 20초쯤 걸리는 사이클에서 화면이
+   멈춘 것인지 일하는 중인지 구분되어야 한다. */
+.live {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--brand);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live {
+    animation: none;
+  }
+}
+
+.btn {
+  border: 1px solid var(--divider);
+  background: var(--surface);
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  color: var(--text-sub);
+}
+
+.btn:first-of-type {
+  margin-left: auto;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.log {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.empty {
+  margin: auto;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-sub);
+}
+
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--track);
+}
+
+.row {
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: var(--surface);
+  border-left: 3px solid var(--brand);
+}
+
+/* 어느 경로에서 온 줄인지 색으로 구분한다 — 같은 로그에 두 흐름이
+   섞이므로 눈으로 갈라져야 한다. */
+.row[data-group='judge'] {
+  border-left-color: var(--series-3);
+}
+
+.row[data-bad='true'] {
+  border-left-color: var(--down);
+  background: #fff1f1;
+}
+
+.rowHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.step {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.time {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.tag {
+  font-family: var(--font-num);
+  font-size: 10.5px;
+  color: var(--text-sub);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 2px 6px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.tx {
+  display: inline-block;
+  margin-top: 5px;
+  font-family: var(--font-num);
+  font-size: 10.5px;
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.tx:hover {
+  text-decoration: underline;
+}
+
+/* 확대 — 해시를 눈으로 대조할 때 좁으면 못 읽는다 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.overlayBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(1000px, 92vw);
+  height: min(80svh, 900px);
+  padding: 18px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+}

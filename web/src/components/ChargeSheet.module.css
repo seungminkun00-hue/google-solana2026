@@ -1,0 +1,172 @@
+/* 앱 안의 충전 시트. 봇 삭제 확인 시트와 같은 어법을 쓴다 —
+   화면 안쪽에서 올라오고, 바깥을 누르면 닫힌다. */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  background: rgba(15, 23, 42, 0.42);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sheet {
+  width: 100%;
+  max-height: 88%;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  padding: 20px 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: up 220ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
+}
+
+.title {
+  font-family: var(--font-ui);
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.sub {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-top: -4px;
+}
+
+.warn {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-strong);
+  background: #fff6e8;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.field select,
+.field input {
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  padding: 11px 12px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  color: var(--text-strong);
+  background: var(--surface);
+}
+
+.quick {
+  display: flex;
+  gap: 6px;
+}
+
+.quick button {
+  flex: 1;
+  border: 1px solid var(--divider);
+  background: var(--surface);
+  border-radius: var(--r-pill);
+  padding: 8px 0;
+  cursor: pointer;
+  font-family: var(--font-num);
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.quickOn {
+  border-color: var(--brand) !important;
+  background: var(--brand-weak) !important;
+  color: var(--brand) !important;
+  font-weight: 700;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  font-size: 12px;
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.kv dt {
+  color: var(--text-muted);
+}
+
+.kv dd {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.err {
+  font-size: 12px;
+  color: var(--down);
+}
+
+.ok {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--up);
+}
+
+.note {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.cancel,
+.confirm {
+  flex: 1;
+  border: 0;
+  cursor: pointer;
+  padding: 14px 0;
+  border-radius: var(--r-pill);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cancel {
+  background: var(--chip-bg);
+  color: var(--text-strong);
+}
+
+.confirm {
+  background: var(--brand);
+  color: #fff;
+}
+
+.confirm:disabled,
+.cancel:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

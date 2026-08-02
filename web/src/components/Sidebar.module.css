@@ -1,0 +1,66 @@
+/* 목업 옆 패널 자리. 탭 줄 + 본문. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: center;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: var(--r-pill);
+  background: var(--surface-translucent);
+  box-shadow: var(--shadow-card);
+  align-self: flex-start;
+}
+
+.tab {
+  border: 0;
+  cursor: pointer;
+  padding: 7px 15px;
+  border-radius: var(--r-pill);
+  background: none;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-chip);
+}
+
+.tab:hover {
+  color: var(--text-strong);
+}
+
+.on {
+  background: var(--brand);
+  color: #fff;
+}
+
+.on:hover {
+  color: #fff;
+}
+
+.body {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+/* 감추되 언마운트하지 않는다 — 진행 중인 매수 스트림을 끊지 않기 위해서다.
+   display:none 이면 레이아웃에서도 빠져 폰이 가운데로 돌아온다. */
+.hide {
+  display: none;
+}
+
+.show {
+  display: block;
+}
+
+/* 심사위원 패널은 조작부와 로그 두 기둥을 스스로 내놓는다(프래그먼트).
+   가로로 나란히 세워야 원래 배치가 유지된다. */
+.showRow {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}

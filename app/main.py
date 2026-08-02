@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import secrets
 import time
 import uuid
@@ -26,18 +27,21 @@ from fastapi.responses import JSONResponse
 from app import config
 from app.agents import pipeline
 from app.bots import BOTS, DEMO_BOT_IDS, BotInstance, make_demo_bots
+from app.core.journal import JOURNAL
 from app.core.ledger import LEDGER, InsufficientFunds, RouteViolation
 from app.core.mandate import issue_invoice
 from app.core.proofs import PROOFS
 from app.core.positions import BOOK, Position, should_close
 from app.core.receipts import RECEIPTS
 from app.core.scheduler import SCHEDULER
+from app.core.session import session_id
 from app.core import store as STORE
 from app.core.x402_client import (BudgetExceeded, KillSwitchActive,
                                   PaymentFailed, SpendTracker, paid_fetch)
 from app.core.x402_provider import paywall_dynamic
 from app.external import router as mock_router, spot
 from app.models import Rulebook, Signal, SpendPolicy, Thesis
+from app.ui import router as ui_router
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="Cognitive Economy v2 — self-funding trading bots")
@@ -55,7 +59,24 @@ app.add_middleware(
 )
 
 app.include_router(mock_router)
-make_demo_bots()
+# 앱 화면 전용 조회 라우터. 자금 경로에는 관여하지 않는다 — app/ui.py 주석 참조.
+app.include_router(ui_router)
+# 심사위원 시연 창구(app/judge.py). 그쪽은 사이클을 돌리려고 app.main 을
+# 되임포트하는데, 함수 안에서 지연 임포트하므로 순환이 생기지 않는다.
+from app.judge import router as judge_router  # noqa: E402
+app.include_router(judge_router)
+
+# [2026-08-02] 기동할 때 데모봇(bot1~3)을 자동으로 만들지 않는다.
+#
+# 심사위원이 앱을 열었을 때 남이 만든 봇 세 개가 이미 있으면, 직접 봇을
+# 만들어 보는 흐름이 시작부터 사라진다. 빈 목록에서 "추가하기"로 시작해야
+# 이 앱이 무엇을 하는 물건인지 손으로 알게 된다.
+#
+# 정의 자체는 남겨둔다. `POST /demo/seed` 가 여전히 make_demo_bots() 를
+# 부르고, verify_scenario.py 와 audit.py 가 그 라우트로 bot1~3 을 만들어
+# 검증한다 — 검증 경로는 그대로 살아 있다.
+if os.environ.get("DEMO_BOTS", "0") == "1":
+    make_demo_bots()
 
 # 저장된 상태를 되살린다. make_demo_bots() 뒤여야 한다 —
 # 데모봇 정의는 코드가, 사용자 봇은 파일이 진실원이다.
@@ -153,6 +174,24 @@ def get_bot(bot_id: str) -> BotInstance:
     return BOTS[bot_id]
 
 
+async def _snapshot_equity(bot: BotInstance) -> None:
+    """이 순간 이 봇의 총 평가액을 저널에 한 점 찍는다.
+
+    수익률 곡선의 유일한 재료다. 자산이 실제로 움직인 직후 —
+    체결·청산 — 에만 부른다. 주기적으로만 찍으면 매매 순간의 계단이
+    사라져서 곡선이 실제와 다른 모양이 된다.
+    """
+    from app.external import spot
+    snap = await LEDGER.snapshot()
+    cash = sum(snap.get(bot.w(r), 0) for r in
+               ("user-treasury", "invest-wallet", "research-agent",
+                "revenue-wallet"))
+    market = 0
+    for p in BOOK.of_bot(bot.bot_id):
+        market += p.qty * await spot(p.ticker) // 10**6
+    JOURNAL.record_equity(bot.bot_id, cash + market, cash, market)
+
+
 # ── 판매 창구 (봇별 x402 페이월) ────────────────────────────────────
 def _revenue_of(request: Request) -> str:
     return f"revenue-wallet@{request.path_params['bot_id']}"
@@ -181,8 +220,8 @@ async def sell_thesis(bot_id: str, thesis_id: str,
             "error": "영수증 불완전 — 판매 불가",
             "inference_mode": receipt.inference_mode,
             "sources": receipt.inference_sources,
-            "hint": "선언한 추론과 실제 추론이 다릅니다."
-                    if receipt.degraded else "BYOK 영수증입니다."})
+            "hint": "선언한 추론과 실제 추론이 다릅니다 — 모의 판단으로 "
+                    "폴백한 결정은 팔지 않습니다."})
 
     # [출처 공개] 무엇이 이 판단을 만들었는지 사는 쪽이 볼 수 있어야 한다.
     # Gemini가 실패해 모의 판단으로 폴백했다면 degraded=true가 나간다.
@@ -320,6 +359,18 @@ async def bot_cycle(bot_id: str, _: None = Depends(require_operator)):
             qty=qty, basis=thesis.size_usdc, entry_price=thesis.price_micro,
             tx=proof.proof_id))
         bot.trades_today += 1
+
+        # [화면용 기록] 체결은 여기서만 일어난다. 포지션은 청산되면
+        # 장부에서 사라지므로, 남기지 않으면 '거래 내역'을 복원할 방법이
+        # 없다. 기록 실패가 매매를 되돌리게 하지는 않는다.
+        try:
+            JOURNAL.record_fill(
+                bot_id=bot_id, ticker=thesis.ticker, side="buy", qty=qty,
+                price_micro=thesis.price_micro, gross_micro=thesis.size_usdc,
+                receipt_id=thesis.receipt_id, tx=proof.proof_id)
+            await _snapshot_equity(bot)
+        except Exception as e:                        # noqa: BLE001
+            print(f"  ⚠️ 체결 기록 실패: {str(e)[:80]}")
         # 포지션이 열린 직후에 저장한다. 여기서 프로세스가 죽으면
         # 온체인에는 토큰이 있는데 장부에는 없는 상태가 된다.
         STORE.save()
@@ -336,6 +387,112 @@ async def bot_cycle(bot_id: str, _: None = Depends(require_operator)):
                     "note": "룰북 청산조건 충족 시 자동 매도"})
 
     return {"log": log, "balances": await bot.balances()}
+
+
+# ── 수동 주문 (사용자가 대화로 직접 시킨 것) ────────────────────────
+async def manual_buy(bot: BotInstance, ticker: str, size_usdc: int,
+                     reason: str) -> dict:
+    """룰북 게이트를 거치지 않고 바로 산다.
+
+    [왜 룰북을 안 보는가]
+    룰북은 **에이전트의 자율 판단**에 걸리는 규칙이다. "확신도 0.8 미만이면
+    사지 마라" 는 봇이 스스로 판단할 때의 기준이지, 소유자가 직접 내리는
+    주문까지 막으라는 뜻이 아니다. 증권사 앱에서 자동매매 조건을 걸어둬도
+    본인이 시장가 주문을 내는 것은 언제나 되는 것과 같다.
+
+    그래서 이 경로는 에이전트의 주장을 훼손하지 않는다 — 다만 **반드시
+    구분해서 기록한다**(receipt.manual). 구분이 없으면 나중에 이 체결을
+    보고 "봇이 룰북을 어겼다"고 읽히고, 그건 사실이 아니다.
+
+    [그래도 지키는 것]
+      · 돈은 있어야 산다 (없는 돈으로는 체결되지 않는다)
+      · 미러 토큰이 있는 종목만 (없는 것은 애초에 살 수 없다)
+      · 자금 경로 규칙은 그대로 — user-treasury → invest-wallet 위임을 거친다
+    """
+    from app.core.markets import quote_spec
+    if quote_spec(ticker) is None:
+        raise HTTPException(400, {
+            "error": "거래할 수 없는 종목",
+            "ticker": ticker,
+            "hint": "devnet 에 미러 토큰이 있는 종목만 살 수 있습니다."})
+
+    price = await spot(ticker)
+    qty = size_usdc * 10**6 // price
+    if qty <= 0:
+        raise HTTPException(400, {
+            "error": "주문 금액이 1주 값보다 작습니다",
+            "price_usd": price / 10**6})
+
+    # 투자지갑에 돈이 모자라면 트레저리에서 위임한다. 만다트 심사를
+    # 거치지 않는다 — 심사는 에이전트가 청구할 때 하는 것이고,
+    # 이건 소유자가 자기 돈을 자기 계좌 안에서 옮기는 것이다.
+    snap = await LEDGER.snapshot()
+    have = snap.get(bot.w("invest-wallet"), 0)
+    if have < size_usdc:
+        need = size_usdc - have
+        treasury = snap.get(bot.w("user-treasury"), 0)
+        if treasury < need:
+            raise HTTPException(409, {
+                "error": "잔고 부족",
+                "need_usdc": round(size_usdc / 10**6, 2),
+                "have_usdc": round((have + treasury) / 10**6, 2)})
+        await LEDGER.transfer(bot.w("user-treasury"), bot.w("invest-wallet"),
+                              need, f"manual-order:{bot.bot_id}")
+
+    proof = await LEDGER.swap_in(bot.w("invest-wallet"), ticker, size_usdc, qty)
+
+    # 영수증은 만든다 — 정산할 때 분배표가 여기 있어야 하기 때문이다.
+    # 다만 manual 로 찍어 에이전트의 성적표에서는 빠진다.
+    receipt = RECEIPTS.create(
+        bot_id=bot.bot_id, source_urls=[], prompt=f"manual:{reason}",
+        output=f"manual buy {ticker} {size_usdc}", proofs=[],
+        policy_snapshot={"rulebook": bot.rulebook.model_dump(mode="json"),
+                         "manual": True},
+        splits_bps=bot.splits, declared_mode=config.INFERENCE_MODE,
+        inference_sources={})
+    receipt.manual = True
+    receipt.manual_reason = reason[:200]
+    receipt.execution_tx = proof.proof_id
+    receipt.position_size = size_usdc
+
+    BOOK.open(Position(receipt_id=receipt.receipt_id, bot_id=bot.bot_id,
+                       ticker=ticker, qty=qty, basis=size_usdc,
+                       entry_price=price, tx=proof.proof_id))
+    bot.trades_today += 1
+    try:
+        JOURNAL.record_fill(bot_id=bot.bot_id, ticker=ticker, side="buy",
+                            qty=qty, price_micro=price, gross_micro=size_usdc,
+                            receipt_id=receipt.receipt_id, tx=proof.proof_id,
+                            reason="manual")
+        await _snapshot_equity(bot)
+    except Exception as e:                                # noqa: BLE001
+        print(f"  ⚠️ 수동 매수 기록 실패: {str(e)[:80]}")
+    STORE.save()
+
+    return {"side": "buy", "ticker": ticker, "qty": qty / 10**6,
+            "price_usd": price / 10**6, "size_usd": size_usdc / 10**6,
+            "tx": proof.proof_id, "receipt_id": receipt.receipt_id,
+            "manual": True}
+
+
+async def manual_sell(bot: BotInstance, ticker: str, reason: str) -> dict:
+    """그 종목의 열린 포지션을 전부 청산한다. 룰북 조건은 보지 않는다."""
+    targets = [p for p in BOOK.of_bot(bot.bot_id)
+               if p.ticker == ticker or p.ticker == f"{ticker}x"]
+    if not targets:
+        raise HTTPException(409, {
+            "error": "그 종목의 보유 포지션이 없습니다", "ticker": ticker})
+
+    results = []
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url=BASE,
+                                 timeout=300, headers=INTERNAL_HEADERS) as c:
+        for pos in targets:
+            r = await c.post(f"{BASE}/settle/{pos.receipt_id}",
+                             params={"reason": f"manual:{reason[:60]}"})
+            results.append(r.json() if r.status_code == 200 else r.text[:120])
+    return {"side": "sell", "ticker": targets[0].ticker,
+            "closed": len(results), "results": results, "manual": True}
 
 
 # ── 포지션 관리 (자동 청산) ─────────────────────────────────────────
@@ -359,7 +516,10 @@ async def manage_positions(bot_id: str, _: None = Depends(require_operator)):
             async with httpx.AsyncClient(transport=transport, base_url=BASE,
                                          timeout=120,
                                          headers=INTERNAL_HEADERS) as c:
-                r = await c.post(f"{BASE}/settle/{pos.receipt_id}")
+                # 청산 사유를 함께 넘긴다. 이 문자열은 여기서만 만들어지고
+                # settle 쪽에서는 다시 계산할 수 없다(포지션이 곧 닫힌다).
+                r = await c.post(f"{BASE}/settle/{pos.receipt_id}",
+                                 params={"reason": reason})
             entry["closed"] = True
             entry["settle"] = r.json() if r.status_code == 200 else r.text[:150]
         actions.append(entry)
@@ -369,7 +529,8 @@ async def manage_positions(bot_id: str, _: None = Depends(require_operator)):
 
 # ── 정산 ────────────────────────────────────────────────────────────
 @app.post("/settle/{receipt_id}")
-async def settle(receipt_id: str, _: None = Depends(require_operator)):
+async def settle(receipt_id: str, reason: str = "",
+                 _: None = Depends(require_operator)):
     pos = BOOK.get(receipt_id)
     if pos is None:
         raise HTTPException(404, "position not found")
@@ -384,13 +545,33 @@ async def settle(receipt_id: str, _: None = Depends(require_operator)):
     proof = await LEDGER.swap_out(bot.w("invest-wallet"), pos.ticker,
                                   pos.qty, proceeds)
     result = await RECEIPTS.settle(receipt_id, pnl, bot.w("invest-wallet"))
+    held = pos.held_hours()
     result.update({"close_tx": proof.proof_id,
+                   # 종목명이 없으면 청산 결과만 보고는 무엇을 팔았는지 알 수
+                   # 없다. 정산 화면이 그대로 쓰는 값이라 여기서 실어 보낸다.
+                   "ticker": pos.ticker,
                    "entry_price": pos.entry_price / 10**6,
                    "exit_price": exit_price / 10**6,
                    "qty": pos.qty / 10**6,
-                   "held_hours": round(pos.held_hours(), 2)})
+                   "held_hours": round(held, 2)})
+
+    # [화면용 기록] 청산가·실현손익·보유시간은 이 순간에만 존재한다.
+    # BOOK.close 이후에는 어디에도 남지 않으므로 먼저 적는다.
+    try:
+        JOURNAL.record_fill(
+            bot_id=pos.bot_id, ticker=pos.ticker, side="sell", qty=pos.qty,
+            price_micro=exit_price, gross_micro=proceeds,
+            receipt_id=receipt_id, tx=proof.proof_id, pnl_micro=pnl,
+            reason=reason or "manual", hold_hours=round(held, 3))
+    except Exception as e:                            # noqa: BLE001
+        print(f"  ⚠️ 청산 기록 실패: {str(e)[:80]}")
+
     BOOK.close(receipt_id)
     STORE.save()
+    try:
+        await _snapshot_equity(bot)
+    except Exception as e:                            # noqa: BLE001
+        print(f"  ⚠️ 자산 스냅샷 실패: {str(e)[:80]}")
     return result
 
 
@@ -465,8 +646,13 @@ class CreateBotRequest(BaseModel):
 
 
 @app.post("/bots")
-async def create_bot(req: CreateBotRequest, _: None = Depends(require_admin)):
-    """앱에서 봇을 생성한다."""
+async def create_bot(req: CreateBotRequest, _: None = Depends(require_admin),
+                     session: str = Depends(session_id)):
+    """앱에서 봇을 생성한다.
+
+    session 은 만든 브라우저를 가리킨다. 헤더가 없으면 빈 값이 되고,
+    그 봇은 모두에게 보이는 공용 봇이 된다 — 검증 스크립트가 그 경로다.
+    """
     from app.adapters import universe
 
     # ① 종목 검증
@@ -499,7 +685,8 @@ async def create_bot(req: CreateBotRequest, _: None = Depends(require_admin)):
     # 실패했다"고 아는데 서버는 좀비를 붙잡고 있는 상태.
     # 실제로 이 경로로 만들어진 고아 봇이 devnet에 여럿 남아 있었다.
     bot_id = f"bot_{uuid.uuid4().hex[:8]}"
-    bot = BotInstance(bot_id=bot_id, owner=req.owner, rulebook=rb)
+    bot = BotInstance(bot_id=bot_id, owner=req.owner, rulebook=rb,
+                      session=session)
 
     # ④ devnet이면 지갑과 토큰 계정을 만든다
     if hasattr(LEDGER, "ensure_bot_wallets"):
@@ -533,6 +720,10 @@ async def delete_bot(bot_id: str, _: None = Depends(require_admin)):
             "hint": "POST /bots/{bot_id}/close-all 로 먼저 청산하세요."})
     bot.killed = True
     del BOTS[bot_id]
+    # 프로필도 함께 지운다. 남겨두면 같은 bot_id 가 재사용될 때 남의
+    # 이름·프롬프트가 붙은 봇이 생긴다.
+    from app.core.profiles import PROFILES
+    PROFILES.drop(bot_id)
     STORE.save()
     return {"deleted": bot_id}
 
@@ -580,6 +771,23 @@ async def kill_bot(bot_id: str, on: bool = True, _: None = Depends(require_admin
     bot.tracker.policy.killed = on
     STORE.save()
     return {"bot_id": bot_id, "killed": on}
+
+
+@app.get("/health")
+async def health():
+    """살아 있는가. 호스팅 업체의 헬스체크가 이걸 본다.
+
+    원장·추론·시세가 실제로 붙었는지까지 알려준다 — 200 만 돌려주면
+    '떠 있지만 아무것도 못 하는' 상태를 못 걸러낸다.
+    """
+    from app.adapters import gemini_byok, kis_quotes
+    return {
+        "ok": True,
+        "ledger": os.environ.get("LEDGER_MODE", "mock").lower(),
+        "bots": len(BOTS),
+        "inference_live": gemini_byok.enabled(),
+        "quotes_live": kis_quotes.enabled(),
+    }
 
 
 @app.post("/demo/seed")
@@ -659,3 +867,40 @@ async def seed(_: None = Depends(require_admin)):
             "balances": report,
             "note": "research-agent는 시드하지 않습니다 — 인보이스로만 조달. "
                     "사용자 생성 봇은 초기화 대상이 아닙니다."}
+
+
+# ══════ 프론트 서빙 (배포용) ═══════════════════════════════════════
+#
+# [왜 같은 서버가 화면까지 주나]
+# 정적 호스팅과 API 서버를 따로 띄우면 배포가 둘, 주소가 둘, CORS 설정이
+# 하나 더 늘고, 심사위원에게 줄 링크도 어느 쪽인지 헷갈린다.
+# 화면은 빌드된 정적 파일 몇 개뿐이라 이 프로세스가 같이 주면 그만이다.
+# 같은 출처가 되므로 CORS 도, VITE_API_BASE 도 신경 쓸 것이 없어진다.
+#
+# web/dist 가 없으면(개발 중) 아무것도 하지 않는다 — 개발은 vite dev 가
+# 5173 에서 화면을, 이 서버가 8100 에서 API 를 맡는 구성 그대로다.
+_DIST = pathlib.Path("web") / "dist"
+
+if _DIST.is_dir():
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/assets", StaticFiles(directory=_DIST / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa(full_path: str):
+        """SPA 폴백.
+
+        /bot/xxx 같은 주소는 서버에 없는 경로다. 브라우저가 새로고침하면
+        404 가 나므로 index.html 을 돌려주고 라우팅은 브라우저가 한다.
+
+        ⚠️ 이 라우트는 **맨 마지막**에 등록돼야 한다. 위에 있으면 /ui/*
+        까지 삼켜서 API 가 전부 HTML 을 돌려준다. 그래서 파일 끝이다.
+        """
+        # 실제 파일이면 그대로 준다 (favicon.png, vite.svg 등)
+        candidate = _DIST / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_DIST / "index.html")
+
+    print(f"  🌐 프론트 서빙: {_DIST}")

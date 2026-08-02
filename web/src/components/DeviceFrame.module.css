@@ -1,0 +1,57 @@
+/* 3단: [폰] [안내 또는 지갑시연] [실행 로그]. 값은 DeviceFrame.tsx 의 GAP 과 맞춘다.
+   가운데 기둥만 탭으로 바뀌고 로그는 항상 오른쪽에 남는다. */
+.stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: 100%;
+  height: 100svh;
+  padding: 0 16px;
+  overflow: hidden;
+}
+
+/* 폭이 모자라 세로로 쌓인 배치. 이때만 페이지가 스크롤된다 —
+   안 그러면 폰 아래에 놓인 패널에 닿을 수가 없다. */
+.stage[data-mode='stack'] {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  height: auto;
+  min-height: 100svh;
+  padding: 24px 16px;
+  overflow: visible;
+}
+
+.device {
+  position: relative;
+  flex: none;
+  transform-origin: center center;
+}
+
+.screen {
+  position: absolute;
+  overflow: hidden;
+  background: var(--bg);
+  /* 구멍 모서리(이미지 기준 반경 ~112px → 0.5배 56px)에 맞춘다.
+     베젤이 위에 덮이므로 살짝 작게 잡아 틈이 생기지 않게 한다. */
+  border-radius: 54px;
+  /* 화면 안쪽에서만 스크롤·터치가 일어나게 한다 */
+  isolation: isolate;
+}
+
+.bezel {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  z-index: 10;
+}
+
+/* 목업을 붙이지 않는 좁은 화면(실제 폰) */
+.bare {
+  width: 100%;
+  min-height: 100svh;
+}

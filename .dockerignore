@@ -1,0 +1,15 @@
+# 이미지에 들어가면 안 되는 것 (개인키·비밀)
+wallets/
+.env
+web/.env
+web/.env.local
+
+# 굳이 넣을 이유가 없는 것
+web/node_modules/
+state/
+__pycache__/
+**/__pycache__/
+*.pyc
+.git/
+docs/
+*.md

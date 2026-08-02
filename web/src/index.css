@@ -1,0 +1,81 @@
+/* split 판을 쓴다. complete 는 한글 전체가 든 1.3MB 짜리 한 덩어리라
+   첫 화면에서 그걸 통째로 받는다. split 은 unicode-range 로 나뉘어 있어
+   실제로 쓰인 글자가 든 조각만 내려온다. */
+@import 'wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.css';
+@import '@fontsource/space-grotesk/400.css';
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/700.css';
+@import './styles/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* 목업이 붙은 동안에는 페이지가 스크롤되지 않는다.
+   스크롤은 화면 안쪽에서만 일어나야 상단 헤더와 하단 탭이 붙어 있는다. */
+body.framed {
+  overflow: hidden;
+}
+
+body {
+  /* 데스크톱에서 목업 바깥에 깔리는 바탕 */
+  background: radial-gradient(circle at 50% 30%, #e9eef7 0%, #cfd9e8 100%);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  width: 100%;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+p,
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 숫자가 자릿수마다 흔들리지 않게. 금액이 실시간으로 바뀌는 화면이라
+   이게 없으면 폴링할 때마다 레이아웃이 미세하게 떨린다. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}

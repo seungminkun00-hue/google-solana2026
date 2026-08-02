@@ -123,4 +123,20 @@ async def paid_fetch(
     if res.status_code != 200:
         tracker.rollback(proof)
         raise PaymentFailed(f"결제 후 요청 실패 ({res.status_code}): {res.text[:120]}")
-    return res.json(), proof
+
+    # [화면용 기록] 어느 봇이 어느 라우트에 얼마를 냈는지 남긴다.
+    # 롤백된 결제는 여기까지 오지 않으므로, 저널에는 실제로 물건을 받은
+    # 호출만 쌓인다. 지갑 이름이 "research-agent@bot1" 꼴이라 봇을 알 수 있다.
+    # 실패해도 매매를 멈추지 않는다 — 기록이 본 작업을 방해하면 안 된다.
+    data = res.json()
+    try:
+        from app.core.journal import JOURNAL
+        # 추론 라우트는 응답에 'source'(실제로 답한 모델 ID 또는 "mock")를
+        # 싣는다. 그 값을 그대로 옮겨 적는다 — 선언이 아니라 응답이 진실원.
+        model = data.get("source", "") if isinstance(data, dict) else ""
+        JOURNAL.record_api_call(tracker.wallet.split("@")[-1], resource, amount,
+                                tx=proof.proof_id, model=str(model))
+    except Exception as e:                            # noqa: BLE001
+        print(f"  ⚠️ API 호출 기록 실패: {str(e)[:80]}")
+
+    return data, proof

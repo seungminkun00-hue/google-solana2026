@@ -1,0 +1,211 @@
+/* Figma node 1:750 — 거래 내역 탭 */
+
+.wrap {
+  padding: 17px 13px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card {
+  padding: 16px 14px 18px;
+  border-radius: var(--r-card);
+  background: var(--surface-nav);
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cardTitle {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sub {
+  font-size: 11.95px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* ── 4지표 ────────────────────────────────────────────── */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 16px;
+}
+
+.stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+}
+
+.stats > div + div {
+  border-left: 1px solid var(--divider);
+}
+
+.stats dt {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.stats dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.note {
+  margin-top: 14px;
+  font-size: 10.5px;
+  color: var(--label-mini);
+}
+
+/* ── 표 ───────────────────────────────────────────────── */
+.tableWrap {
+  margin-top: 14px;
+  overflow-x: auto;
+  /* 폭이 좁은 폰에서 표가 화면을 밀지 않고 자기 안에서만 넘친다 */
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  min-width: 316px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* 열 폭을 고정한다. auto 로 두면 종목명이 길어질 때마다 숫자 열이
+   밀려서, 스크롤할 때 자릿수가 계속 흔들린다. */
+.table th:nth-child(1),
+.table td:nth-child(1) {
+  width: 38px;
+}
+.table th:nth-child(2),
+.table td:nth-child(2) {
+  width: 78px;
+}
+.table th:nth-child(3),
+.table td:nth-child(3) {
+  width: 30px;
+}
+.table th:nth-child(4),
+.table td:nth-child(4) {
+  width: 66px;
+}
+.table th:nth-child(5),
+.table td:nth-child(5) {
+  width: 52px;
+}
+
+.table th {
+  padding: 0 0 10px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 9px 0;
+  border-top: 1px solid var(--divider);
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.num {
+  text-align: right;
+}
+
+.when {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.sym {
+  padding-right: 8px !important;
+}
+
+.symName {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.symCode {
+  display: block;
+  font-family: var(--font-num);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.buy {
+  color: var(--buy);
+}
+
+.sell {
+  color: var(--sell);
+}
+
+.pnlUp,
+.pnlDown {
+  display: block;
+  font-family: var(--font-num);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.pnlUp {
+  color: var(--up);
+}
+
+.pnlDown {
+  color: var(--down);
+}
+
+.empty {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.state {
+  padding: 40px 22px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-sub);
+}
+
+.err {
+  color: var(--down);
+}
+
+/* 온체인 서명 열. 좁으니 잘라 보여주고 전체는 title 로 둔다. */
+.tx a {
+  color: var(--brand);
+  text-decoration: none;
+  font-family: var(--font-num);
+  font-size: 10.5px;
+}
+
+.tx a:hover {
+  text-decoration: underline;
+}

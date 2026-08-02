@@ -24,20 +24,24 @@ _send_tx()가 블록해시를 고정해 재전송을 무해하게 만든다. 상
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import pathlib
 import time
 
 from solders.hash import Hash
 from solders.keypair import Keypair
-from solders.message import MessageV0
+from solders.message import MessageV0, to_bytes_versioned
 from solders.pubkey import Pubkey
+from solders.signature import Signature
 from solders.transaction import VersionedTransaction
+from solders.system_program import ID as SYSTEM_PROGRAM_ID
 from spl.token.constants import TOKEN_PROGRAM_ID
-from spl.token.instructions import (create_idempotent_associated_token_account,
+from spl.token.instructions import (approve_checked,
+                                    create_idempotent_associated_token_account,
                                     get_associated_token_address,
                                     transfer_checked)
-from spl.token.models import TransferCheckedParams
+from spl.token.models import ApproveCheckedParams, TransferCheckedParams
 
 # app.core.ledger 가 아니라 routes 에서 가져온다. ledger.py는 하단에서
 # 이 파일을 임포트하므로(_make), 거기서 가져오면 순환이 된다.
@@ -87,6 +91,13 @@ class DevnetLedger:
         # 쓰기 확정 기준이 confirmed이므로 읽기도 confirmed로 맞춘다.
         self.client = AsyncClient(rpc_url, commitment=Confirmed)
         self.keypairs: dict[str, Keypair] = {}      # 논리명 → 키페어
+        # [외부 소유 지갑 — 2026-08]
+        # 심사위원 지갑처럼 **우리가 개인키를 갖지 않는** 지갑. 주소만 안다.
+        # 여기 있는 지갑에서 돈을 빼려면 위임(approve)을 받아야 하고,
+        # 그 이체는 delegated_transfer() 로만 가능하다. transfer()는
+        # keypairs 에서 서명자를 찾으므로 애초에 동작하지 않는다 —
+        # 남의 지갑을 우리 마음대로 못 건드린다는 것이 코드로 강제된다.
+        self.external_owners: dict[str, Pubkey] = {}
         self.fee_payer: Keypair | None = None       # 수수료 전담 (SOL 보유)
         self.mint: Pubkey | None = None             # devnet USDC 민트
         self.proofs: list[PaymentProof] = []
@@ -128,13 +139,23 @@ class DevnetLedger:
         return get_associated_token_address(self.keypairs[wallet].pubkey(),
                                             self.mirrors[ticker])
 
+    def owner_pubkey(self, wallet: str) -> Pubkey:
+        """논리명 → 공개키. 우리 지갑이든 외부 지갑이든 여기로 통일한다."""
+        kp = self.keypairs.get(wallet)
+        if kp is not None:
+            return kp.pubkey()
+        pk = self.external_owners.get(wallet)
+        if pk is None:
+            raise KeyError(f"모르는 지갑: {wallet}")
+        return pk
+
     def ata(self, wallet: str) -> Pubkey:
         """연관 토큰 계정(Associated Token Account) 주소.
 
         SPL에서 '지갑'은 SOL만 담는다. 토큰은 지갑마다 별도 계정이
         필요하고, 그 주소는 (지갑, 민트)로부터 결정론적으로 계산된다.
         """
-        return get_associated_token_address(self.keypairs[wallet].pubkey(), self.mint)
+        return get_associated_token_address(self.owner_pubkey(wallet), self.mint)
 
     # ── 단건 이체 ───────────────────────────────────────────────
     async def transfer(self, src: str, dst: str, amount: int,
@@ -232,24 +253,37 @@ class DevnetLedger:
            '마지막 쓰기 이후'의 상태임이 보장된다.
            지갑 수가 바뀌어도(새 봇 생성) 미스 처리한다.
         """
+        # [외부 지갑도 센다 — 2026-08]
+        # 심사위원 지갑은 우리 것이 아니지만 잔고 합계에는 들어가야 한다.
+        # 빼면 심사위원→user-treasury 예치가 '없던 돈이 생긴 것'으로 보여
+        # audit_supply 의 통화량 보존이 깨진다. 세는 것과 서명할 수 있는
+        # 것은 별개다 — 이 지갑들은 세기만 하고 우리가 움직이지는 못한다.
+        n_wallets = len(self.keypairs) + len(self.external_owners)
         cached = self._snap_cache
         if (cached is not None
                 and time.monotonic() - cached[0] < SNAPSHOT_TTL
-                and cached[1] == len(self.keypairs)):
+                and cached[1] == n_wallets):
             return dict(cached[2])
 
-        names = list(self.keypairs)
+        names = list(self.keypairs) + list(self.external_owners)
         atas = [self.ata(n) for n in names]
+        # [2026-08-02] getMultipleAccounts 는 한 번에 100개까지만 받는다
+        # ("Too many inputs provided; max 100"). 봇을 만들 때마다 지갑이
+        # 4개씩 늘어나므로, 봇 25마리쯤에서 잔고 조회가 통째로 죽는다 —
+        # 그 시점부터는 봇 생성도 조회도 전부 500이 된다. 실제로 그렇게 됐다.
+        # 100개씩 잘라 부르고 합친다. 지갑이 적으면 예전처럼 호출 1번이다.
+        CHUNK = 100
         for attempt in range(4):
             try:
-                res = await self.client.get_multiple_accounts(atas)
                 out = {}
-                for name, acc in zip(names, res.value):
-                    if acc is None:
-                        out[name] = 0            # 계정 미생성 = 진짜 0
-                    else:
-                        out[name] = int.from_bytes(acc.data[64:72], "little")
-                self._snap_cache = (time.monotonic(), len(self.keypairs), out)
+                for i in range(0, len(atas), CHUNK):
+                    res = await self.client.get_multiple_accounts(atas[i:i + CHUNK])
+                    for name, acc in zip(names[i:i + CHUNK], res.value):
+                        if acc is None:
+                            out[name] = 0        # 계정 미생성 = 진짜 0
+                        else:
+                            out[name] = int.from_bytes(acc.data[64:72], "little")
+                self._snap_cache = (time.monotonic(), n_wallets, out)
                 return dict(out)
             except Exception as e:
                 if attempt == 3:
@@ -268,6 +302,18 @@ class DevnetLedger:
         """
         self._check_route(wallet, "market")
         ixs = [
+            # [2026-08-02] 받는 쪽 토큰 계정을 **이 자리에서** 만든다.
+            #
+            # 예전에는 봇을 만들 때 전 종목의 계정을 미리 팠다. 미러 토큰이
+            # 4종일 때는 괜찮았지만, 시장을 늘려 80종이 되면 봇 하나 만드는 데
+            # 계정 80개다 — 임대료도 시간도 그만큼 든다. 실제로 살 종목은
+            # 그중 한둘이므로 사는 순간에 만드는 것이 맞다.
+            #
+            # 멱등 명령이라 이미 있으면 조용히 통과하고, 같은 트랜잭션 안에
+            # 있으므로 '계정은 생겼는데 스왑은 실패' 같은 반쪽 상태가 없다.
+            create_idempotent_associated_token_account(
+                self.fee_payer.pubkey(), self.keypairs[wallet].pubkey(),
+                self.mirrors[ticker]),
             self._transfer_ix(wallet, "market", usdc_amount),        # USDC 지불
             self._token_transfer_ix("market", wallet, ticker, qty),  # 토큰 수령
         ]
@@ -340,11 +386,13 @@ class DevnetLedger:
             ixs.append(create_idempotent_associated_token_account(
                 self.fee_payer.pubkey(), kp.pubkey(), self.mint))
 
-        # 미러 주식 토큰 계정은 invest-wallet에만 필요하다
-        inv = self.keypairs[f"invest-wallet@{bot_id}"].pubkey()
-        for mint in self.mirrors.values():
-            ixs.append(create_idempotent_associated_token_account(
-                self.fee_payer.pubkey(), inv, mint))
+        # [2026-08-02] 미러 주식 토큰 계정은 **여기서 만들지 않는다.**
+        #
+        # 예전에는 invest-wallet 에 전 종목의 계정을 미리 팠다. 4종일 때는
+        # 트랜잭션 하나로 끝났지만, 시장을 늘려 80종이 되면 봇 하나 만드는 데
+        # 계정 80개다 — 임대료(약 0.16 SOL)도 시간도 그만큼 들고, 실제로 살
+        # 종목은 그중 한둘뿐이다.
+        # 이제 swap_in 이 매수하는 순간 그 종목 계정만 멱등 생성한다.
 
         for batch in self._pack(ixs, n_signers=1):
             await self._send_fee_payer_only(batch, label=f"{bot_id} 토큰계정 생성")
@@ -614,6 +662,162 @@ class DevnetLedger:
             # 만료 확정 — 이 tx는 영원히 안착할 수 없다. 이제 새로 만들어도 안전.
 
         raise RuntimeError(f"{label} 실패: {str(last_err)[:200]}")
+
+    # ── 외부 지갑 (심사위원 시연) ───────────────────────────────
+    #
+    # [설계 — 왜 '위임'인가]
+    # 심사위원 지갑의 개인키는 우리에게 없다. 주소만 안다고 남의 돈을
+    # 뺄 수는 없다 — 계좌번호를 안다고 인출이 되지 않는 것과 같다.
+    # 그래서 SPL 의 approve(위임)를 쓴다. 심사위원이 **한 번** 서명해
+    # "이 봇이 최대 N 까지 꺼내가도 좋다"고 등록하면, 그 뒤로는 봇이
+    # 자기 서명만으로 한도 안에서 인출한다. 자동이체 신청서와 같다.
+    #
+    # 이 구조가 곧 이 프로젝트의 주장이다: 사람의 승인은 위임 시점
+    # 한 번뿐이고, 이후의 결제는 에이전트가 단독으로 집행한다.
+    async def assert_wallet(self, address: str) -> Pubkey:
+        """이 주소가 정말 '지갑' 인지 체인에서 확인한다.
+
+        [왜 필요한가 — 2026-08-02 실측]
+        형식 검사만 하면 민트 주소·토큰 계정·프로그램 주소도 전부 통과한다.
+        실제로 민트 주소가 등록돼 테스트 USDC 50 이 아무도 못 꺼내는
+        계정으로 들어갔고, 위임 트랜잭션은 owner 자리에 민트가 박혀
+        팬텀이 'Unexpected error' 로 거절했다. 원인을 짚기까지 오래 걸렸다.
+
+        지갑은 시스템 프로그램이 소유한다. 토큰 관련 계정은 토큰 프로그램이
+        소유하므로 여기서 갈린다. 아직 아무것도 없는 새 지갑은 계정 자체가
+        없는데, 그건 정상이므로 통과시킨다.
+        """
+        pk = Pubkey.from_string(address)        # 형식이 틀리면 여기서 죽는다
+        info = (await self._rpc(self.client.get_account_info, pk)).value
+        if info is None:
+            return pk                           # 한 번도 안 쓴 새 지갑
+        owner = str(info.owner)
+        if owner != str(SYSTEM_PROGRAM_ID):
+            hint = ("토큰 민트나 토큰 계정 주소로 보입니다"
+                    if owner == str(TOKEN_PROGRAM_ID)
+                    else f"프로그램 {owner[:8]}… 이 소유한 계정입니다")
+            raise ValueError(f"지갑 주소가 아닙니다 — {hint}. "
+                             f"팬텀에 표시되는 '내 지갑 주소' 를 넣으세요.")
+        return pk
+
+    def register_external(self, name: str, address: str) -> Pubkey:
+        """개인키 없는 외부 지갑을 논리명으로 등록한다.
+
+        ⚠️ 반드시 assert_wallet() 으로 검증한 주소만 넘길 것.
+        """
+        pk = Pubkey.from_string(address)
+        if name in self.keypairs:
+            raise ValueError(f"{name} 은 우리가 키를 가진 지갑입니다")
+        self.external_owners[name] = pk
+        self._invalidate_snapshot()             # 잔고 합계 대상이 늘었다
+        return pk
+
+    async def ensure_external_account(self, name: str) -> None:
+        """외부 지갑의 USDC 토큰 계정을 만들어 둔다.
+
+        토큰 계정이 없으면 이체도 위임도 불가능하다. 계정 생성은
+        주인의 승인이 필요 없고 비용만 우리가 낸다 — 그래서 심사위원은
+        SOL 이 한 푼도 없어도 된다.
+        """
+        ix = create_idempotent_associated_token_account(
+            self.fee_payer.pubkey(), self.owner_pubkey(name), self.mint)
+        await self._send_fee_payer_only([ix], label=f"{name} 토큰계정")
+
+    async def fund_external(self, name: str, amount: int) -> PaymentProof:
+        """시연용 테스트 USDC 지급.
+
+        새로 발행(mint)하지 않고 external 지갑에서 **이체**한다.
+        발행하면 통화량이 늘어 audit_supply 의 보존 검증이 깨진다.
+        시연용 코인도 어딘가에서 와야 한다는 규칙을 예외 없이 지킨다.
+        """
+        await self.ensure_external_account(name)
+        return await self.transfer("external", name, amount, "judge-faucet")
+
+    async def build_approve_tx(self, owner_name: str, delegate_name: str,
+                               amount: int) -> str:
+        """심사위원이 서명할 위임 트랜잭션을 만들어 base64 로 돌려준다.
+
+        수수료는 우리 fee_payer 가 낸다. 그래서 서명자가 둘이고,
+        우리 몫은 여기서 미리 채운 뒤 심사위원 자리만 비워 보낸다
+        (부분 서명). 브라우저의 팬텀이 그 자리를 채워 전송한다.
+
+        심사위원에게 SOL 을 요구하지 않기 위한 구조다. devnet SOL 을
+        받아오라고 하는 순간 시연이 거기서 막힌다.
+        """
+        await self.ensure_external_account(owner_name)
+        ix = approve_checked(ApproveCheckedParams(
+            program_id=TOKEN_PROGRAM_ID,
+            source=self.ata(owner_name),
+            mint=self.mint,
+            delegate=self.owner_pubkey(delegate_name),
+            owner=self.owner_pubkey(owner_name),
+            amount=amount,
+            decimals=USDC_DECIMALS,
+            signers=[],
+        ))
+        bh = await self._rpc(self.client.get_latest_blockhash)
+        msg = MessageV0.try_compile(self.fee_payer.pubkey(), [ix], [],
+                                    bh.value.blockhash)
+        # 서명 순서는 메시지가 요구하는 서명자 순서와 같아야 한다.
+        # fee_payer 가 0번(수수료 지불자), 심사위원이 1번이다.
+        our_sig = self.fee_payer.sign_message(to_bytes_versioned(msg))
+        tx = VersionedTransaction.populate(msg, [our_sig, Signature.default()])
+        return base64.b64encode(bytes(tx)).decode()
+
+    async def delegate_status(self, name: str) -> dict:
+        """이 지갑이 누구에게 얼마를 위임해 뒀는지 온체인에서 직접 읽는다.
+
+        SPL 토큰 계정 레이아웃(165바이트):
+          amount 64..72 · delegate COption<Pubkey> 72..108
+          · delegated_amount 121..129
+        COption 은 앞 4바이트가 1이면 값이 있다는 뜻이다.
+        """
+        res = await self._rpc(self.client.get_account_info, self.ata(name))
+        acc = res.value
+        if acc is None:
+            return {"exists": False, "balance": 0,
+                    "delegate": None, "allowance": 0}
+        d = acc.data
+        has_delegate = int.from_bytes(d[72:76], "little") == 1
+        return {
+            "exists": True,
+            "balance": int.from_bytes(d[64:72], "little"),
+            "delegate": str(Pubkey.from_bytes(d[76:108])) if has_delegate else None,
+            "allowance": int.from_bytes(d[121:129], "little") if has_delegate else 0,
+        }
+
+    async def delegated_transfer(self, src: str, dst: str, amount: int,
+                                 resource: str) -> PaymentProof:
+        """위임받은 권한으로 외부 지갑에서 인출한다.
+
+        서명자가 지갑 주인이 아니라 **위임받은 쪽**이라는 점만
+        transfer() 와 다르다. 심사위원의 추가 서명은 필요 없다 —
+        이 함수가 도는 순간이 곧 '사람 개입 없는 결제'다.
+
+        한도를 넘으면 SPL 런타임이 거부한다. 우리가 검사해서가 아니라
+        체인이 막는다는 점이 중요하다. 위임은 백지수표가 아니다.
+        """
+        self._check_route(src, dst)
+        delegate = self.keypairs.get(dst)
+        if delegate is None:
+            raise ValueError(f"{dst} 는 우리가 서명할 수 있는 지갑이 아닙니다")
+
+        ix = transfer_checked(TransferCheckedParams(
+            program_id=TOKEN_PROGRAM_ID,
+            source=self.ata(src),
+            mint=self.mint,
+            dest=self.ata(dst),
+            owner=delegate.pubkey(),        # ★ 주인이 아니라 위임받은 쪽
+            amount=amount,
+            decimals=USDC_DECIMALS,
+        ))
+        sig = await self._send_tx([ix], [self.fee_payer, delegate],
+                                  label=f"위임인출({src}→{dst})")
+        proof = PaymentProof(proof_id=str(sig), payer_wallet=src,
+                             payee_wallet=dst, amount=amount, resource=resource)
+        self.proofs.append(proof)
+        PROOFS.register(proof.proof_id, dst, amount, resource)
+        return proof
 
     async def close(self) -> None:
         await self.client.close()

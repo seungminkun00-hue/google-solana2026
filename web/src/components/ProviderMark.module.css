@@ -1,0 +1,21 @@
+.mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-num);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.2px;
+}
+
+/* 실제 로고 이미지. 받은 파일에 원형 테두리가 이미 들어 있어서
+   배경도 테두리도 여기서 그리지 않는다 — 그리면 두 겹이 된다. */
+.logo {
+  display: block;
+  flex: none;
+  object-fit: contain;
+  border-radius: 50%;
+}

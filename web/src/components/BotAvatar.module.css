@@ -1,0 +1,16 @@
+/* Figma: 47px 원, 테두리 #DDDDDD 1px */
+.ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: 1px solid #dddddd;
+  border-radius: 50%;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.star {
+  display: block;
+  object-fit: contain;
+}

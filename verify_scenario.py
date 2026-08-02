@@ -25,6 +25,11 @@ import subprocess
 import sys
 import time
 
+# 검증 중에는 실시세를 쓰지 않는다. 손절·익절을 증명하려면 기준가를
+# 직접 움직여야 하는데, 실시세를 쓰면 그 조작이 무시된다 —
+# app/external.py 의 spot() 주석 참조. app 임포트보다 먼저 세워야 한다.
+os.environ["PRICE_SOURCE"] = "mock"
+
 MODE = os.environ.get("LEDGER_MODE", "mock").lower()
 SLOW = MODE == "devnet"
 

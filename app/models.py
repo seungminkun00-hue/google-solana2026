@@ -105,7 +105,19 @@ class DecisionReceipt(BaseModel):
     inference_mode: str = "mock"
     inference_sources: dict[str, str] = {}   # {"flash": "...", "deep": "..."}
     degraded: bool = False                   # 선언과 실제가 어긋났는가
-    receipt_complete: bool = True            # byok면 False → 판매 불가
+    receipt_complete: bool = True            # 폴백했으면 False → 판매 불가
+
+    # ── 사람이 직접 시킨 주문인가 ────────────────────────────────────
+    # 대화로 "지금 사줘" 라고 지시하면 룰북 게이트를 거치지 않고 바로
+    # 집행된다. 그건 에이전트의 판단이 아니라 **소유자의 수동 주문**이다.
+    #
+    # 반드시 구분해서 남겨야 하는 이유가 둘이다.
+    #   ① 그 체결을 근거로 "에이전트가 룰북을 넘어섰다"고 읽히면 안 된다.
+    #      룰북은 여전히 에이전트의 자율 판단에만 걸리는 규칙이다.
+    #   ② 적중률(RECEIPTS.stats)은 에이전트의 성적이다. 사람이 시킨
+    #      주문의 손익이 섞이면 만다트가 잘못된 성적으로 심사하게 된다.
+    manual: bool = False
+    manual_reason: str = ""                  # 사용자가 실제로 한 말
     ts: int = Field(default_factory=now)
 
 
