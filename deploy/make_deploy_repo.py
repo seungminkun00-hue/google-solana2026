@@ -46,7 +46,13 @@ DOCKERFILE = """\
 FROM node:22-slim AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
-RUN npm ci
+# `npm ci` 가 아니라 `npm install` 인 이유:
+# 잠금파일이 윈도우에서 만들어져서 리눅스 전용 선택 의존성의 하위 가지가
+# 비어 있다(@rolldown/binding-wasm32-wasi -> @napi-rs/wasm-runtime ->
+# @emnapi/core). `npm ci` 는 플랫폼과 무관하게 트리 전체를 검사하므로
+# "Missing @emnapi/core from lock file" 로 죽는다. `npm install` 은 이
+# 플랫폼에 실제로 필요한 것만 푼다.
+RUN npm install --no-audit --no-fund
 COPY web/ ./
 RUN node node_modules/vite/bin/vite.js build
 
