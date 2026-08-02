@@ -72,13 +72,14 @@ def main() -> None:
     shutil.rmtree(STAGE)
 
     size = OUT.stat().st_size / 1024
-    print(f"✅ {OUT}  ({size:,.0f} KB)")
-    print(f"   지갑 {copied + 1}개 · .env {'포함' if env.exists() else '없음'}")
+    # 이모지를 쓰면 cp949 콘솔(윈도우 기본)에서 UnicodeEncodeError 로 죽는다.
+    print(f"[OK] {OUT}  ({size:,.0f} KB)")
+    print(f"     지갑 {copied + 1}개 · .env {'포함' if env.exists() else '없음'}")
     print()
     print("서버에서:")
-    print("   tar -xzf secrets.tar.gz -C /app")
+    print("     tar -xzf secrets.tar.gz -C /app")
     print()
-    print("⚠️ 이 파일은 개인키를 담고 있습니다. git·채팅·메일로 보내지 마세요.")
+    print("[!] 이 파일은 개인키를 담고 있습니다. git·채팅·메일로 보내지 마세요.")
 
 
 if __name__ == "__main__":

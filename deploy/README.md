@@ -10,6 +10,40 @@
                         /health      헬스체크
 ```
 
+> ⚠️ **GitHub Pages 로는 안 된다.** Pages 는 정적 파일 서버라 파이썬을 못 돌린다.
+> 루트에 `index.html` 이 없으니 README.md 를 대신 렌더링해서, 켜 두면
+> "웹사이트를 눌렀는데 README 만 나온다" 가 된다. Vercel·Netlify 도 같은 이유로
+> 안 된다(6절 표 참조). 서버가 도는 곳이어야 한다.
+
+---
+
+## 0. 가장 빠른 길 — 배포 전용 비공개 저장소
+
+호스팅은 **git 저장소를 보고 빌드**한다. 그런데 기동에 필요한 `wallets/` 와
+`.env` 는 공개 저장소에 없다(1절). 그래서 볼륨을 붙이거나 시크릿을 넣는
+작업이 생기는데, 그걸 통째로 없애는 방법이 있다 — **배포용 사본을 비공개
+저장소로 하나 더 두는 것**이다.
+
+```powershell
+py -3.13 deploy/make_deploy_repo.py     # → ../cognitive-economy-deploy/
+```
+
+만들어진 폴더는 `wallets/` 와 `.env` 를 **포함**하고, 그것들을 이미지에
+넣는 Dockerfile 이 따로 들어 있다. GitHub 에서 **Private** 저장소를 하나
+만들어 push 한 뒤, Render 나 Cloud Run 에서 그 저장소를 고르면 끝이다.
+볼륨도 시크릿도 CLI 도 필요 없다.
+
+| | 공개 저장소 | 비공개 배포 저장소 |
+|---|---|---|
+| 용도 | 심사위원이 읽는 코드 | 호스팅이 빌드해 가는 사본 |
+| `wallets/` · `.env` | 없음 | **있음** |
+| Dockerfile | 키를 안 넣음 | 키를 이미지에 넣음 |
+
+> ⚠️ 배포 저장소는 **반드시 Private**. Public 으로 올리면 devnet 개인키와
+> Gemini·KIS 키가 그대로 노출된다.
+
+아래 1~5절은 볼륨 방식(수동 배포)을 쓸 때의 절차다.
+
 ---
 
 ## 1. git 에 올라가지 않는 것들 — 이게 핵심이다
@@ -147,7 +181,9 @@ curl https://<도메인>/health
 | | 맞는가 | 이유 |
 |---|---|---|
 | Fly.io · Railway · Render | ✅ | 영구 볼륨 + HTTPS + Docker. 볼륨을 꼭 붙일 것 |
+| Google Cloud Run | ✅ | 해커톤 주제에 맞다. **최소·최대 인스턴스를 1** 로 |
 | Cloudtype · Koyeb | ✅ | 국내/무료 티어. 볼륨 지원 확인 필요 |
+| **GitHub Pages** | ❌ | 정적 파일만. 파이썬이 안 돈다 → README 만 뜬다 |
 | Vercel · Netlify | ❌ | 정적/서버리스라 메모리 상태와 볼륨이 없다 |
 | EC2 · GCE 소형 VM | ✅ | 가장 단순. 다만 HTTPS 를 직접(Caddy·nginx) |
 
