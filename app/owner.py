@@ -30,6 +30,7 @@ from fastapi.responses import HTMLResponse
 
 from app.bots import BOTS
 from app.core.journal import JOURNAL
+from app.core.ownerlog import LABELS, OWNER_LOG
 from app.core.positions import BOOK
 from app.core.profiles import PROFILES
 
@@ -102,17 +103,30 @@ def _collect() -> dict:
         s["idle_min"] = round((now - s["last_seen"]) / 60, 1)
 
     everyone = [b for s in rows for b in s["bots"]]
+    counts = OWNER_LOG.counts()
     return {
         "now": now,
         "uptime_min": round((now - BOOT) / 60, 1),
         "totals": {
+            # '지금' — 살아 있는 봇 기준
             "sessions": len(rows),
             "bots": len(everyone),
             "trades": sum(b["trades"] for b in everyone),
             "api_calls": sum(b["api_calls"] for b in everyone),
             "spend_micro": sum(b["spend_micro"] for b in everyone),
         },
+        "ever": {
+            # '지금까지' — 지워진 봇까지 포함. 이 둘이 다른 것이 핵심이다.
+            "sessions": OWNER_LOG.sessions_seen(),
+            "bots_created": counts.get("bot_created", 0),
+            "bots_deleted": counts.get("bot_deleted", 0),
+            "runs": counts.get("run", 0),
+            "fills": counts.get("fill", 0),
+            "chats": counts.get("chat", 0),
+            "wallets": counts.get("wallet_connected", 0),
+        },
         "sessions": rows,
+        "log": OWNER_LOG.recent(300),
     }
 
 
@@ -129,15 +143,24 @@ async def page(x_owner_token: str | None = Header(default=None),
     """브라우저로 열어보는 표. 5초마다 새로고침한다."""
     _guard(x_owner_token or t)
     d = _collect()
-    tt = d["totals"]
+    tt, ev = d["totals"], d["ever"]
 
     def esc(s: str) -> str:
         return (str(s).replace("&", "&amp;").replace("<", "&lt;")
                 .replace(">", "&gt;").replace('"', "&quot;"))
 
+    def when(ts: float) -> str:
+        m = (d["now"] - ts) / 60
+        if m < 1:
+            return "방금"
+        if m < 60:
+            return f"{m:.0f}분 전"
+        return f"{m / 60:.1f}시간 전"
+
     body = []
     if not d["sessions"]:
-        body.append('<p class="empty">아직 아무도 봇을 만들지 않았습니다.</p>')
+        body.append('<p class="empty">지금 살아 있는 봇이 없습니다. '
+                    '아래 기록은 그대로 남아 있습니다.</p>')
     for s in d["sessions"]:
         body.append(f'<h2>브라우저 <code>{esc(s["session"])}</code> '
                     f'<span class="dim">· 봇 {len(s["bots"])}개 · '
@@ -155,6 +178,27 @@ async def page(x_owner_token: str | None = Header(default=None),
                 f'<td>{b["api_calls"]}</td>'
                 f'<td>${b["spend_micro"] / 1e6:.4f}</td>'
                 f'<td>{b["idle_min"]:.0f}분 전</td></tr>')
+        body.append("</table>")
+
+    # ── 기록 ────────────────────────────────────────────────
+    # 위 표는 '지금 있는 봇'만 보여준다. 심사위원이 만들었다 지우면
+    # 흔적이 사라지므로, 일어난 일은 여기 따로 남는다.
+    log = d["log"]
+    body.append(f'<h2>기록 <span class="dim">· 최근 {len(log)}건 '
+                f'(봇을 지워도 남습니다)</span></h2>')
+    if not log:
+        body.append('<p class="empty">아직 아무 일도 일어나지 않았습니다.</p>')
+    else:
+        body.append('<table class="log"><tr><th>시각</th><th>브라우저</th>'
+                    '<th>무엇을</th><th>봇</th><th>내용</th></tr>')
+        for e in log:
+            body.append(
+                f'<tr><td class="dim">{when(e["ts"])}</td>'
+                f'<td><code>{esc(e["session"])}</code></td>'
+                f'<td class="k k-{esc(e["kind"])}">'
+                f'{esc(LABELS.get(e["kind"], e["kind"]))}</td>'
+                f'<td>{esc(e["name"] or "-")}</td>'
+                f'<td class="dim">{esc(e["detail"])}</td></tr>')
         body.append("</table>")
 
     return f"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
@@ -176,15 +220,36 @@ async def page(x_owner_token: str | None = Header(default=None),
  th{{color:#8b949e;font-weight:500;font-size:12px}}
  code{{background:#21262d;padding:1px 6px;border-radius:4px}}
  .empty{{color:#8b949e;margin:28px 0}}
+ table.log{{max-width:1100px}}
+ table.log td{{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+               max-width:420px}}
+ .k{{font-weight:600}}
+ .k-bot_created{{color:#3fb950}} .k-bot_deleted{{color:#f85149}}
+ .k-fill{{color:#58a6ff}}        .k-sell{{color:#d29922}}
+ .k-wallet_connected,.k-deposit{{color:#bc8cff}}
+ h3{{font-size:13px;color:#8b949e;margin:22px 0 6px;font-weight:500}}
 </style></head><body>
 <h1>관제</h1>
 <div class="dim">서버 가동 {d["uptime_min"]:.0f}분 · 5초마다 새로고침</div>
+
+<h3>지금</h3>
 <div class="cards">
   <div class="card"><b>{tt["sessions"]}</b>접속 브라우저</div>
-  <div class="card"><b>{tt["bots"]}</b>봇</div>
+  <div class="card"><b>{tt["bots"]}</b>살아 있는 봇</div>
   <div class="card"><b>{tt["trades"]}</b>거래</div>
   <div class="card"><b>{tt["api_calls"]}</b>API 호출</div>
   <div class="card"><b>${tt["spend_micro"] / 1e6:.4f}</b>누적 지출</div>
+</div>
+
+<h3>지금까지 &mdash; 지워진 봇까지 포함</h3>
+<div class="cards">
+  <div class="card"><b>{ev["sessions"]}</b>다녀간 브라우저</div>
+  <div class="card"><b>{ev["bots_created"]}</b>만든 봇</div>
+  <div class="card"><b>{ev["bots_deleted"]}</b>지운 봇</div>
+  <div class="card"><b>{ev["wallets"]}</b>지갑 연결</div>
+  <div class="card"><b>{ev["runs"]}</b>실행</div>
+  <div class="card"><b>{ev["fills"]}</b>체결</div>
+  <div class="card"><b>{ev["chats"]}</b>대화</div>
 </div>
 {"".join(body)}
 </body></html>"""

@@ -92,6 +92,13 @@ if _restored["bots"]:
           f"(신규 {len(_restored['restored_bots'])}) "
           f"영수증 {_restored['receipts']} 포지션 {_restored['positions']}")
 
+# 관제 로그는 별도 파일이라 따로 되살린다. 봇이 하나도 복원되지 않아도
+# (전부 지워졌어도) "누가 왔다 갔다" 는 남아 있어야 한다.
+from app.core.ownerlog import OWNER_LOG  # noqa: E402
+_log_rows = OWNER_LOG.restore()
+if _log_rows:
+    print(f"  ↺ 관제 기록 복원: {_log_rows}건")
+
 SIGNALS: dict[str, Signal] = {}
 THESES: dict[str, Thesis] = {}
 BASE = "http://testserver"

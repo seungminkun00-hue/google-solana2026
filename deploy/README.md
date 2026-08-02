@@ -157,6 +157,15 @@ localhost 는 예외라 개발 중에는 문제없다.
 의 `VITE_ADMIN_TOKEN` 을 **같이** 바꿔야 한다. 다만 브라우저 번들에 들어가는
 이상 비밀이 아니다 — 실제 보호는 세션 격리(`app/core/session.py`)가 한다.
 
+**관제 화면을 켜두려면 `OWNER_TOKEN` 을 준다.** 없으면 `/owner` 라우트가
+아예 등록되지 않는다(404). 기존 `ADMIN_TOKEN` 은 프론트 번들에 들어가는
+공개값이라 이 화면을 지킬 수 없어서 별도 값을 쓴다.
+
+**관제 기록은 볼륨이 있어야 재배포를 넘긴다.** `state/owner_log.<mode>.jsonl`
+에 한 줄씩 쌓이는데, 볼륨 없이 배포하면 컨테이너가 새로 뜰 때 사라진다.
+심사 중에 배포를 건드리지 않으면 문제되지 않지만, 기록을 남겨야 한다면
+`state/` 를 볼륨에 둘 것.
+
 **devnet SOL 을 채워둔다.** 세션마다 지갑이 하나씩, 봇마다 넷씩 늘어난다.
 수수료 지불자: `Hf6FjLQKxn6rBwJsVP1re8KrgppPyxfYAqrii8Uy1Ewj`
 (https://faucet.solana.com)

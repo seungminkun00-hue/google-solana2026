@@ -37,6 +37,7 @@ from app.core import markets as MARKETS_
 from app.core.journal import JOURNAL, PROVIDERS, classify
 from app.core.ledger import LEDGER
 from app.core.markets import DEFAULT_KEYS as DEFAULT_MARKETS
+from app.core.ownerlog import OWNER_LOG
 from app.core.positions import BOOK
 from app.core.profiles import (CURRENCIES, GOALS, MODELS, RISKS,
                                SESSIONS, STYLES, TAGS, BotProfile, PROFILES)
@@ -1090,6 +1091,11 @@ async def bot_chat(bot_id: str, req: ChatRequest,
                     reply = (f"{note}\n\n(참고 — 제 판단은 이렇습니다) {reply}")
                 elif note:
                     reply = f"{reply}\n\n{note}"
+            OWNER_LOG.add("chat", session=session, bot_id=bot_id,
+                          name=prof.display_name,
+                          detail=req.message[:60]
+                                 + ("" if out["on_topic"] else " (주제 밖)")
+                                 + (" → 주문 체결" if trade else ""))
             return {"reply": reply,
                     "source": out["model"], "on_topic": out["on_topic"],
                     "news_tickers": news_tickers, "trade": trade,
@@ -1099,6 +1105,9 @@ async def bot_chat(bot_id: str, req: ChatRequest,
 
     # ② 폴백 — 모델 없이 답한다. 여기서도 주제 제한은 그대로 산다.
     if not _looks_on_topic(req.message, bot):
+        OWNER_LOG.add("chat", session=session, bot_id=bot_id,
+                      name=prof.display_name,
+                      detail=req.message[:60] + " (주제 밖)")
         return {"reply": OFF_TOPIC_REPLY, "source": "state", "on_topic": False,
                 "suggestions": SUGGESTIONS}
 
@@ -1115,12 +1124,17 @@ async def bot_chat(bot_id: str, req: ChatRequest,
             f"사실에 없는 숫자를 지어내지 마세요.")
         try:
             text = await gemini_live.converse_async(prompt)
+            OWNER_LOG.add("chat", session=session, bot_id=bot_id,
+                          name=prof.display_name, detail=req.message[:60])
             return {"reply": text.strip(), "source": "gemini-live",
                     "on_topic": True, "grounded": grounded,
                     "suggestions": SUGGESTIONS}
         except Exception as e:                        # noqa: BLE001
             print(f"  ⚠️ 챗 Gemini 실패: {str(e)[:90]} → 상태 기반 응답 사용")
 
+    OWNER_LOG.add("chat", session=session, bot_id=bot_id,
+                  name=prof.display_name,
+                  detail=req.message[:60] + " (원장 기반 응답)")
     return {"reply": grounded, "source": "state", "on_topic": True,
             "suggestions": SUGGESTIONS}
 
@@ -1175,12 +1189,20 @@ async def delete_bot_ui(bot_id: str, close_positions: bool = True,
     from app.main import close_all, delete_bot
     _get_bot(bot_id, session)
 
+    # 지우기 전에 이름을 챙긴다 — 지운 뒤에는 프로필도 함께 사라져서
+    # 로그에 "(이름 없음)" 만 남는다.
+    name = PROFILES.ensure(bot_id).display_name
+    calls = len(JOURNAL.api_calls_of(bot_id))
+    fills = len(JOURNAL.fills_of(bot_id))
+
     closed = 0
     if close_positions and BOOK.of_bot(bot_id):
         result = await close_all(bot_id, None)
         closed = result["closed"]
 
     deleted = await delete_bot(bot_id, None)
+    OWNER_LOG.add("bot_deleted", session=session, bot_id=bot_id, name=name,
+                  detail=f"거래 {fills}건 · API {calls}회 · 청산 {closed}건")
     return {**deleted, "closed_positions": closed}
 
 
@@ -1341,6 +1363,17 @@ async def run_cycle(bot_id: str, attempts: int = 2,
         if filled:
             break
 
+    OWNER_LOG.add("run", session=session, bot_id=bot_id,
+                  name=PROFILES.ensure(bot_id).display_name,
+                  detail=("체결됨" if filled else "체결 없음")
+                         + f" · 시도 {tried}회")
+    if filled:
+        ex = next(s for s in log if s.get("step") == "executor" and "qty" in s)
+        from app.adapters import universe
+        OWNER_LOG.add("fill", session=session, bot_id=bot_id,
+                      name=PROFILES.ensure(bot_id).display_name,
+                      detail=f"{universe.company_name(ex['ticker'])} "
+                             f"{ex['qty']:.6f}주 @ ${ex['entry_price']:,.2f}")
     return {"bot_id": bot_id, "filled": filled, "attempts": tried,
             "preflight": notes, "log": log,
             "balances": await bot.balances()}
@@ -1409,6 +1442,10 @@ async def sell_positions(bot_id: str, all: bool = False,
             "explorer": _explorer(res.get("close_tx") or ""),
         })
 
+    OWNER_LOG.add("sell", session=session, bot_id=bot_id,
+                  name=PROFILES.ensure(bot_id).display_name,
+                  detail=f"{len(sold)}건 청산 · 실현손익 "
+                         f"{realized / 1e6:+.2f} USDC")
     return {
         "bot_id": bot_id,
         "mode": "all" if all else "rulebook",
@@ -1570,7 +1607,13 @@ async def create_bot_ui(req: UiBotRequest, _: None = Depends(require_admin),
     # 사용자가 방금 정한 룰북이 어떤 문장이 되었는지 그 자리에서 보여주려는
     # 것이다 — 나중에 설정 화면에서도 같은 값을 다시 볼 수 있다.
     bundle = await get_profile(created["bot_id"], session)
-    return {**created, "profile": bundle["profile"], "ai": bundle["ai"]}
+    prof = bundle["profile"]
+    OWNER_LOG.add("bot_created", session=session, bot_id=created["bot_id"],
+                  name=prof.get("display_name", ""),
+                  detail=f"{' · '.join(bundle['market_names'])} · "
+                         f"{len(bundle['rulebook']['tickers'])}종목 · "
+                         f"확신도 하한 {bundle['rulebook']['min_confidence']}")
+    return {**created, "profile": prof, "ai": bundle["ai"]}
 
 
 @router.get("/bots/{bot_id}/profile")

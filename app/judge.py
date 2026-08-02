@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field
 from app import config
 from app.core.ledger import LEDGER
 from app.core.session import clean, session_id
+from app.core.ownerlog import OWNER_LOG
 
 router = APIRouter(prefix="/judge", tags=["judge"])
 
@@ -152,6 +153,8 @@ async def register(body: RegisterBody,
     # 재시작해도 잃지 않도록 주소를 남긴다(공개키뿐 — 비밀 없음).
     _remember(session, str(pubkey))
     status = await LEDGER.delegate_status(wallet)
+    OWNER_LOG.add("wallet_connected", session=session,
+                  detail=f"{str(pubkey)[:8]}…{str(pubkey)[-4:]}")
     return {"address": str(pubkey), "wallet": wallet, **status}
 
 
@@ -179,6 +182,8 @@ async def faucet(amount: int = DEFAULT_FAUCET,
     if not await _restore(session):
         raise HTTPException(400, "지갑을 먼저 등록하세요")
     proof = await LEDGER.fund_external(judge_wallet(session), amount)
+    OWNER_LOG.add("deposit", session=session,
+                  detail=f"테스트 USDC ${amount / 1_000_000:.0f} 수령")
     return {"amount": amount, "tx": proof.proof_id,
             "explorer": EXPLORER.format(proof.proof_id)}
 
