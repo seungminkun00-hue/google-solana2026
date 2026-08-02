@@ -737,19 +737,77 @@ Figma에서 `tap`·`onboarding icon right` 그룹은 받았지만 **아이콘 �
 
 ---
 
-## 커밋 상태
+---
 
-작업 내용은 **아직 커밋하지 않았다.** 작업 트리에 그대로 있다.
+# 2026-08-03 · 배포 완료
 
+## 지금 살아 있는 것
+
+| | |
+|---|---|
+| **심사위원용** | https://googlesolana2026-ce-deploy.onrender.com |
+| **소유자 관제** | `/owner?t=<OWNER_TOKEN>` — 토큰은 `.env` 에 있다 |
+| 호스팅 | Render · Singapore · Starter · Docker |
+| 상태 | devnet · 실추론 ON · 실시세 ON |
+
+`/health` 가 `{"inference_live":true,"quotes_live":true}` 를 주면 정상이다.
+
+## 저장소가 두 개인 이유
+
+호스팅은 git 저장소를 보고 빌드하는데, 기동에 필요한 `wallets/` 와 `.env` 는
+공개 저장소에 없다. 그래서 배포용 사본을 비공개로 하나 더 둔다.
+
+| | |
+|---|---|
+| 공개 | github.com/seungminkun00-hue/google-solana2026 — 심사위원이 읽는 코드 |
+| 비공개 | github.com/seungminkun00-hue/googlesolana2026-ce-deploy — 빌드용 (지갑·키 포함) |
+
+코드를 고친 뒤 배포하는 법:
+
+```powershell
+py -3.13 deploy/make_deploy_repo.py
+cd ../cognitive-economy-deploy
+git add -A; git commit -m "update"; git push      # Render 가 자동 재빌드
 ```
- M README.md  app/main.py  app/external.py  app/config.py
-   app/core/{store,x402_client,journal,profiles,receipts}.py
-   app/core/routes.py  app/agents/pipeline.py
-   app/adapters/{gemini_live,devnet_ledger}.py
- ?? app/ui.py  app/judge.py  app/core/{prompts,events}.py
- ?? app/adapters/{fx,gemini_byok}.py
- ?? web/   (node_modules·dist 는 .gitignore 처리됨)
-```
 
-⚠️ `.env` 에 Gemini API 키가 있다. `.gitignore` 에 넣어뒀지만, 커밋 전에
-`git status` 로 한 번 더 확인할 것.
+**GitHub Pages 로는 안 된다.** 정적 파일 서버라 파이썬이 안 돈다 — 켜 두면
+README 만 보인다. Source 를 `None` 으로 꺼 뒀다(2026-08-03 확인, 404).
+
+## 이번에 잡은 것
+
+- **Render 빌드 실패** — `npm ci` 가 `Missing @emnapi/core from lock file` 로 죽었다.
+  잠금파일이 윈도우에서 만들어져 리눅스 전용 선택 의존성의 하위 가지가 비어
+  있었다(`@rolldown/binding-wasm32-wasi`). `npm ci` 는 플랫폼과 무관하게 트리
+  전체를 검사하므로 걸린다. Dockerfile 을 `npm install` 로 바꿔 해결.
+- **파비콘이 안 바뀌던 것** — PNG 는 진작 새것이었는데 예비로 걸어둔
+  `favicon.svg`(옛 보라 로고)가 남아 있었다. **크롬은 선언 순서와 무관하게
+  SVG 를 우선한다.** SVG 를 지우고 PNG 하나만 남겼다(`?v=2` 로 캐시 무효화).
+- **관제 로그가 재시작에서 유실되던 것** — `store.save()` 의 상태 파일에 얹었더니
+  9건 중 3건이 날아갔다. save() 는 상태를 바꾸는 라우트에서만 불리기 때문.
+  `state/owner_log.<mode>.jsonl` 에 한 줄씩 덧붙이는 방식으로 분리했다.
+
+## 새로 생긴 것
+
+- `app/owner.py` · `app/core/ownerlog.py` — 소유자 전용 관제.
+  "지금"(살아 있는 봇)과 "지금까지"(지워진 봇 포함) 두 층으로 보여준다.
+  `OWNER_TOKEN` 이 없으면 라우트를 등록하지 않는다. 틀린 토큰도 404 를 준다.
+  세션은 해시 앞 6자만 노출한다.
+- `deploy/make_deploy_repo.py` — 비공개 배포 저장소 생성기
+- `deploy/make_deck.py` — 발표용 12장 pptx 생성기.
+  결과물 `.pptx` 는 .gitignore 처리했다(사업 내용이라 공개 여부를 따로 정한다).
+
+## 알아둘 것
+
+- **재배포하면 봇도 관제 기록도 초기화된다.** Render 에 볼륨을 안 붙였다.
+  심사 기간에는 배포를 건드리지 말 것. 남겨야 하면 `/app/state` 에 디스크를 붙인다.
+- **뉴스는 미국 종목만 나온다.** Alpha Vantage 에 한국 종목 기사가 없어서
+  삼성전자를 물으면 "자료가 들어오지 않았다" 고 답한다(지어내지 않는 것이 의도).
+  챗봇의 뉴스 능력을 보이려면 나스닥 봇으로 애플을 묻는 편이 확실하다.
+- devnet 수수료 지불자 `Hf6FjLQKxn6rBwJsVP1re8KrgppPyxfYAqrii8Uy1Ewj` —
+  2026-08-03 기준 0.25 SOL(거래 100회분). 모자라면 faucet.solana.com.
+
+## 남은 것
+
+- 발표 자료 내용 검토 후 공개 저장소에 올릴지 결정
+- 심사 전 devnet SOL 보충
+- (선택) Render 디스크 연결 — 관제 기록을 재배포 넘어 남기려면
