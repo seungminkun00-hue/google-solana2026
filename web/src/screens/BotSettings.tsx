@@ -38,7 +38,7 @@ const EMPTY: Draft = {
   notify: true,
   auto_reinvest: false,
   grant_more_authority: false,
-  deposit_usdc: 500,
+  deposit_usdc: 0,
   min_confidence: 0.8,
   max_position_usd: 50,
   max_trades_per_day: 5,
@@ -499,7 +499,7 @@ export function BotSettings({ mode }: { mode: 'create' | 'edit' }) {
             />
             {mode === 'create' && (
               <MiniNum
-                label="예치금 (USDC)"
+                label="예치금 (USDC) — 0이면 지갑에서 입금"
                 value={d.deposit_usdc}
                 step={50}
                 onChange={(v) => set('deposit_usdc', v)}
@@ -565,7 +565,12 @@ export function BotSettings({ mode }: { mode: 'create' | 'edit' }) {
           >
             <h3 className={s.sheetTitle}>봇이 만들어졌습니다</h3>
             <p className={s.sheetMeta}>
-              devnet 지갑 4개가 생성되고 {d.deposit_usdc} USDC가 예치됐습니다.
+              devnet 지갑 4개가 생성됐습니다.{' '}
+              {/* 빈 지갑으로 태어난 것을 숨기지 않는다. 오히려 이게 요점이다 —
+                  봇이 굴리는 돈은 전부 사용자가 실제로 넣은 돈이다. */}
+              {d.deposit_usdc > 0
+                ? `${d.deposit_usdc} USDC가 예치됐습니다.`
+                : '지갑은 비어 있습니다 — 오른쪽 「심사위원 지갑 시연」에서 입금해야 매매를 시작합니다.'}{' '}
               아래는 이 봇이 판단할 때마다 Gemini에 함께 보내는 지침입니다 —
               {created.ai.live
                 ? ` ${created.ai.model_id} 로 실제 추론합니다.`

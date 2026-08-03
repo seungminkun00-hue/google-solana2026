@@ -110,6 +110,15 @@ CAP_MANDATE_MIN_HIT_RATE = 0.40     # 최근 적중률이 이 밑이면 추가�
 CAP_MANDATE_MAX_EXPOSURE = 300 * USDC
 
 # ── 정산 분배 비율 (bps) ────────────────────────────────────────────
+# 봇 하나를 만들 때 revenue-wallet 에 넣어주는 종잣돈.
+#
+# 사용자 원금이 아니라 **운영자가 봇에 대주는 창업 자본**이다. 인지비용
+# (research-agent)의 재원은 revenue-wallet 뿐인데(routes.py), 벌려면 먼저
+# 생각해야 하고 생각하려면 뉴스를 사야 한다 — 첫 밑천은 누군가 대야 한다.
+# 사용자 트레저리와는 다른 지갑이라 "내가 넣은 돈으로 매매한다" 는 성질은
+# 그대로다.
+FOUNDING_CAPITAL = 300_000          # $0.30
+
 SPLIT_USER_BPS = 8_500
 SPLIT_REVENUE_BPS = 1_000
 SPLIT_RESEARCH_BPS = 500

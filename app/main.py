@@ -693,7 +693,9 @@ class CreateBotRequest(BaseModel):
     label: str = Field("", description="봇 별명 (예: 반도체 집중형)")
 
     # 자금 한도
-    deposit_usdc: float = Field(..., gt=0, description="예치 금액 (USD)")
+    # 0 을 허용한다. 봇은 **빈 지갑으로 태어나는 것이 맞다** — 상세는
+    # create 안의 [⑤ 예치] 주석 참조.
+    deposit_usdc: float = Field(0.0, ge=0, description="예치 금액 (USD)")
 
     # 매수 규칙
     tickers: list[str] = Field(..., min_length=1, description="투자 종목")
@@ -754,12 +756,39 @@ async def create_bot(req: CreateBotRequest, _: None = Depends(require_admin),
     if hasattr(LEDGER, "ensure_bot_wallets"):
         await LEDGER.ensure_bot_wallets(bot_id)
 
-    # ⑤ 예치
+    # ⑤ 예치 — 기본은 **0 이다.**
+    #
+    # [2026-08-03] 예전에는 기본값이 $500 이었고, 그 돈이 `external`
+    # (시스템 바깥을 대리하는 지갑)에서 그냥 들어왔다. 봇을 만들자마자
+    # 트레저리에 72만원어치가 꽂혀 있었다는 뜻이다.
+    #
+    # 이건 이 프로젝트의 주장을 정면으로 깎아먹는다. 우리가 보여주려는
+    # 것은 "심사위원 지갑에서 **실제로** 돈이 나가 봇이 그걸 쓴다" 인데,
+    # 봇이 이미 출처 없는 돈을 들고 있으면 그 뒤에 넣는 $50 은 있으나
+    # 마나다. 심사위원 입장에서는 어느 쪽이 진짜 돈인지 구분할 수 없다.
+    #
+    # 이제 봇은 빈 지갑으로 태어난다. 트레저리에 들어오는 경로는
+    #   · judge-wallet → user-treasury  (위임 인출 = 진짜 내 돈)
+    #   · external     → user-treasury  (명시적으로 금액을 넣었을 때만)
+    # 뿐이고, 자본 만다트는 잔고가 0 이면 "트레저리 잔고 없음" 으로
+    # 매수를 거절한다 — 넣은 만큼만 굴린다는 뜻이라 이게 옳은 동작이다.
     deposit = int(req.deposit_usdc * config.USDC)
-    await LEDGER.transfer("external", bot.w("user-treasury"),
-                          deposit, f"deposit:{bot_id}")
+    if deposit > 0:
+        await LEDGER.transfer("external", bot.w("user-treasury"),
+                              deposit, f"deposit:{bot_id}")
+
+    # 창업 자본 $0.30 — 이건 **사용자 돈이 아니라 운영자가 봇에 대주는
+    # 종잣돈**이고, 없으면 구조적으로 봇이 아무것도 못 한다.
+    #
+    # 인지비용(research-agent)의 재원은 revenue-wallet 뿐이다
+    # (routes.py 에 user-treasury → research-agent 경로가 아예 없다).
+    # 그런데 벌려면 먼저 생각해야 하고, 생각하려면 뉴스를 사야 한다.
+    # 닭과 달걀이라 첫 밑천은 누군가 대야 한다.
+    #
+    # 사용자 원금과 섞이지 않는 지갑에 들어가므로, "내가 넣은 돈으로
+    # 매매한다" 는 성질은 그대로 지켜진다.
     await LEDGER.transfer("external", bot.w("revenue-wallet"),
-                          300_000, f"founding-capital:{bot_id}")
+                          config.FOUNDING_CAPITAL, f"founding-capital:{bot_id}")
 
     # ⑥ 여기까지 왔으면 봇은 실제로 쓸 수 있는 상태다. 이제 등록한다.
     BOTS[bot_id] = bot

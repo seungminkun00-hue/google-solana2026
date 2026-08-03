@@ -1834,7 +1834,9 @@ async def meta():
             "min_confidence": 0.8, "max_position_usd": 50.0,
             "max_trades_per_day": 5, "take_profit_pct": 5.0,
             "stop_loss_pct": 3.0, "max_hold_hours": 24.0,
-            "deposit_usdc": 500.0,
+            # 0 이 기본이다 — 봇은 빈 지갑으로 태어난다.
+            # (main.create 의 [⑤ 예치] 주석 참조)
+            "deposit_usdc": 0.0,
         },
         "fx": await FX.usd_krw(),
     }
@@ -1892,7 +1894,8 @@ class UiBotRequest(BaseModel):
 
     # 룰북 (집행되는 것)
     owner: str = "사용자"
-    deposit_usdc: float = Field(500.0, gt=0)
+    # 0 허용. 지갑을 연결해 실제로 넣은 돈만 봇에 들어가는 것이 맞다.
+    deposit_usdc: float = Field(0.0, ge=0)
     # 개별 종목은 더 이상 화면에서 받지 않는다 — markets 에서 펼쳐진다.
     # 필드를 남겨둔 이유는 스크립트(verify_scenario.py 등)와 옛 호출이
     # 종목을 직접 지정하는 경로를 계속 쓰기 때문이다.
