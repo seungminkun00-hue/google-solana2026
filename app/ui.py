@@ -298,6 +298,23 @@ async def runtime(session: str = Depends(session_id)):
     }
 
 
+@router.get("/bots/{bot_id}/progress")
+async def bot_progress(bot_id: str, since: int = 0,
+                       session: str = Depends(session_id)):
+    """진행 중인 사이클의 단계를 나온 것만 골라 돌려준다.
+
+    화면이 [지금 일해보기] 를 누른 뒤 짧은 주기로 이걸 긁어간다. 사이클
+    응답은 다 끝나야 오는데 devnet 에서는 30~120초라, 그때까지 화면이
+    비어 있으면 '눌렀는데 아무 일도 안 일어난다' 로 보인다.
+
+    since 는 마지막으로 받은 단계 번호다. 그보다 뒤엣것만 오므로 같은
+    줄이 두 번 쌓이지 않는다.
+    """
+    from app.core.progress import PROGRESS
+    _get_bot(bot_id, session)          # 남의 봇 진행 상황은 안 보인다
+    return PROGRESS.since(bot_id, since)
+
+
 @router.post("/runtime/scheduler")
 async def runtime_scheduler(on: bool = True, interval_seconds: int | None = None,
                             _: None = Depends(require_admin),

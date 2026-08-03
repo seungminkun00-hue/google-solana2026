@@ -236,6 +236,16 @@ export type ChatReply = {
   suggestions: string[]
 }
 
+/** 진행 중인 사이클의 단계. 화면이 짧은 주기로 긁어간다. */
+export type Progress = {
+  /** 마지막 단계 번호. 다음 요청의 since 로 그대로 넣는다. */
+  seq: number
+  /** 아직 도는 중인가. */
+  busy: boolean
+  label: string
+  steps: ({ n: number; ts: number; step?: string } & Record<string, unknown>)[]
+}
+
 /** 실행 상태. 아이폰 목업 위 상태 램프가 쓴다. */
 export type Runtime = {
   /** 스케줄러가 돌고 **그리고** 살아 있는 봇이 있는가. 램프의 초록/회색. */

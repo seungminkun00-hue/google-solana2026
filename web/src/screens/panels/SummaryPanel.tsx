@@ -94,11 +94,46 @@ export function SummaryPanel({ botId }: { botId: string }) {
     setRun(null)
     activity.setBusy(true)
     activity.begin('cycle', `앱 · 지금 일해보기 — ${data?.name ?? botId}`)
+
+    // 사이클이 도는 **동안** 단계를 긁어온다.
+    //
+    // [왜 — 2026-08-03] api.run() 은 사이클이 다 끝나야 응답한다. mock
+    // 에서는 1초라 티가 안 났지만 devnet 은 온체인 트랜잭션 8~10건에
+    // Gemini 2회라 30~120초가 걸린다. 그동안 로그에는 제목 줄 하나만
+    // 있고 아무것도 안 떴다 — "눌렀는데 아무 일도 안 일어난다".
+    // 서버가 단계를 쌓는 즉시 여기로 가져와 그때그때 보여준다.
+    let seen = 0
+    let streamed = 0
+    let polling = true
+    const pump = async () => {
+      while (polling) {
+        await new Promise((r) => setTimeout(r, 700))
+        if (!polling) break
+        try {
+          const p = await api.progress(botId, seen)
+          if (p.steps.length) {
+            activity.push('cycle', p.steps)
+            streamed += p.steps.length
+            seen = p.seq
+          }
+        } catch {
+          // 진행 상황 조회가 실패해도 사이클은 계속 돈다. 여기서 멈추면
+          // 곁가지 때문에 본 작업의 결과까지 못 보게 된다.
+        }
+      }
+    }
+    const pumping = pump()
+
     try {
       const r = await api.run(botId)
+      polling = false
+      await pumping
       setRun(r)
       activity.push('cycle', r.preflight)
-      activity.push('cycle', r.log)
+      // 이미 흘려보낸 단계는 다시 쌓지 않는다. 폴링이 통째로 실패했을
+      // 때만(streamed === 0) 최종 응답의 로그로 메운다 — 그 경우에도
+      // 결과는 봐야 하니까.
+      if (streamed === 0) activity.push('cycle', r.log)
       activity.push('cycle', [{
         step: r.filled ? 'done' : 'blocked',
         filled: r.filled, attempts: r.attempts,
@@ -106,6 +141,7 @@ export function SummaryPanel({ botId }: { botId: string }) {
       markRan()
       reload()
     } catch (e) {
+      polling = false
       const msg = e instanceof Error ? e.message : String(e)
       setRunErr(msg)
       activity.push('cycle', [{ step: 'error', reason: msg }])

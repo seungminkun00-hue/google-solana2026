@@ -273,8 +273,30 @@ async def replenish(bot_id: str, needed: int = config.RESEARCH_DAILY_CAP,
 # ── 봇 사이클 ───────────────────────────────────────────────────────
 @app.post("/bots/{bot_id}/cycle")
 async def bot_cycle(bot_id: str, _: None = Depends(require_operator)):
+    """진행 상황 중계를 켜고 본체를 돌린다.
+
+    본체를 따로 뺀 이유는 return 지점이 여러 개라서다. try/finally 로
+    감싸야 어디로 빠져나가든 '진행 중' 표시가 반드시 꺼진다 — 안 그러면
+    중간에 막힌 사이클이 화면에서 영원히 도는 것처럼 보인다.
+    """
+    from app.core.progress import PROGRESS
+    get_bot(bot_id)                    # 없는 봇이면 여기서 404
+    PROGRESS.start(bot_id, "사이클")
+    try:
+        return await _bot_cycle_body(bot_id)
+    finally:
+        PROGRESS.done(bot_id)
+
+
+async def _bot_cycle_body(bot_id: str):
     bot = get_bot(bot_id)
-    log: list[dict] = []
+    # 평범한 list 대신 ProgressLog 를 쓴다. append 될 때마다 진행 상황
+    # 레지스트리로 흘러가서, 화면이 사이클이 **끝나기 전에도** 단계를
+    # 볼 수 있다. devnet 사이클은 30~120초라 그 전까지 화면이 완전히
+    # 비어 있었다 — "눌렀는데 아무것도 안 뜬다" 의 정체였다.
+    # 아래 log.append 들은 하나도 손대지 않는다.
+    from app.core.progress import ProgressLog
+    log = ProgressLog(bot_id)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url=BASE,
                                  headers=INTERNAL_HEADERS) as client:

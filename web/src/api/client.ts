@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   Apis, BotAi, ChatReply, DeletePreflight, Events, Meta, Overview,
-  ProfileBundle, RunResult, Runtime, SellResult, Summary, Trades,
+  ProfileBundle, Progress, RunResult, Runtime, SellResult, Summary, Trades,
 } from './types'
 
 // vite.config.ts 가 /api 를 백엔드로 프록시한다.
@@ -111,6 +111,12 @@ export const api = {
       method: 'POST',
       admin: true,
     }),
+
+  // 진행 중인 사이클의 단계. run() 이 도는 동안 화면이 이걸 반복해 부른다.
+  // 사이클 응답은 다 끝나야 오는데 devnet 에서는 30~120초라, 그때까지
+  // 화면이 비어 있으면 "눌렀는데 아무 일도 안 일어난다" 로 보인다.
+  progress: (id: string, since = 0) =>
+    request<Progress>(`/ui/bots/${id}/progress?since=${since}`),
 
   // 실행 상태 — 목업 위 상태 램프가 폴링한다.
   runtime: () => request<Runtime>('/ui/runtime'),
