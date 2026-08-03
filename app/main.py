@@ -103,6 +103,33 @@ SIGNALS: dict[str, Signal] = {}
 THESES: dict[str, Thesis] = {}
 BASE = "http://testserver"
 
+
+# ── 자동매매 기동 ──────────────────────────────────────────────────
+#
+# [2026-08-03] 스케줄러를 서버가 뜰 때 함께 켠다.
+#
+# 예전에는 POST /scheduler/start 를 누군가 불러야만 돌았다. 그런데 이건
+# **자동매매 봇**이다 — 사람이 매번 켜줘야 도는 자동화는 자동화가 아니고,
+# 무엇보다 앱을 연 사람은 그런 라우트가 있는 줄도 모른다. 화면의 상태
+# 램프가 늘 '꺼짐' 이면 표시등으로서 아무 뜻이 없다.
+#
+# 끄는 방법은 그대로 있다: 봇별 일시정지(앱 요약 탭)와 POST /scheduler/stop.
+# 정지된 봇은 스케줄러가 건너뛰므로, 봇이 없거나 전부 정지면 아무 일도
+# 일어나지 않는다 — 기동만 해두고 실제로 돌지 말지는 봇이 정한다.
+AUTOSTART = os.environ.get("SCHEDULER_AUTOSTART", "1") != "0"
+AUTOSTART_INTERVAL = int(os.environ.get("SCHEDULER_INTERVAL", "120"))
+
+
+@app.on_event("startup")
+async def _autostart_scheduler() -> None:
+    if not AUTOSTART:
+        print("  · 자동매매 자동 기동 꺼짐 (SCHEDULER_AUTOSTART=0)")
+        return
+    # start() 는 asyncio.create_task 를 쓰므로 이벤트 루프가 필요하다.
+    # 모듈 최상단에서 부르면 루프가 아직 없어 죽는다 — 그래서 startup 이다.
+    SCHEDULER.start(AUTOSTART_INTERVAL)
+    print(f"  ▶ 자동매매 기동 (주기 {AUTOSTART_INTERVAL}초)")
+
 # 외부 구매자 — 우리 시스템 밖의 에이전트를 대리한다.
 #
 # [2026-08] 예전에는 external-sale 단계가 LEDGER.transfer 직접 호출이었다.
