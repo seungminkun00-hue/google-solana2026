@@ -130,6 +130,15 @@
   border-left-color: var(--series-3);
 }
 
+/* 아무도 안 눌렀는데 스케줄러가 알아서 한 것.
+   '내가 시킨 것' 과 색으로 갈라 놓는다 — 이 로그에서 제일 중요한 구분이다.
+   사람 개입 없이 일어난 매매가 이 프로젝트가 보여줘야 할 사건이라서,
+   눈에 띄어야지 다른 줄에 묻히면 안 된다. */
+.row[data-group='auto'] {
+  border-left-color: var(--up);
+  background: color-mix(in srgb, var(--up) 6%, transparent);
+}
+
 .row[data-bad='true'] {
   border-left-color: var(--down);
   background: #fff1f1;

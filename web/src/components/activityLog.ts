@@ -15,8 +15,18 @@ import { createContext, useContext } from 'react'
  * group 은 그 줄이 어느 경로에서 왔는지다.
  *   cycle — 앱의 [지금 일해보기] (봇 사이클)
  *   judge — 지갑 시연의 [매수 실행] (위임 인출 + 봇 사이클)
+ *   auto  — **아무도 안 눌렀는데** 스케줄러가 알아서 한 것
+ *
+ * [auto 를 따로 둔 이유 — 2026-08-03]
+ * 예전에는 이 로그에 '사람이 버튼을 눌러서 일어난 일' 만 쌓였다. 스케줄러가
+ * 도는 동안 실제로 매매가 2~3건씩 일어나는데도 로그에는 아무것도 안 떴다 —
+ * 체결 알림(FillToasts)으로 몇 초 반짝하고 사라질 뿐이었다.
+ *
+ * 그런데 '사람이 안 봐도 봇이 알아서 돈다' 는 것이 이 프로젝트의 주장이다.
+ * 그 주장의 증거가 화면에 안 남으면 주장할 방법이 없다. 그래서 자동 매매도
+ * 같은 로그에 쌓되, 내가 시킨 것과 봇이 알아서 한 것을 색으로 가른다.
  */
-export type LogGroup = 'cycle' | 'judge'
+export type LogGroup = 'cycle' | 'judge' | 'auto'
 
 export type LogEntry = {
   id: number
@@ -77,6 +87,11 @@ export const STEP_LABEL: Record<string, string> = {
   blocked: '중단',
   error: '오류',
   'stream-failed': '스트림 연결 실패 — 서버가 응답하지 않음',
+  // 스케줄러가 알아서 한 매매. 버튼을 누른 적이 없는데 일어난 일이라
+  // '자동' 을 이름에 박아둔다 — 이게 이 프로젝트가 보여줘야 할 사건이다.
+  'auto-buy': '자동 매수 — 사람 개입 없음',
+  'auto-sell': '자동 매도·정산 — 사람 개입 없음',
+  'auto-deposit': '자동 입금',
   // 대화로 시킨 매매. 거절도 남긴다 — 안 된 이유가 안 보이는 것이
   // 안 된 것보다 나쁘다.
   'chat-order': '대화 지시 — 주문 체결',

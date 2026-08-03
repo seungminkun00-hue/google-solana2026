@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { AppEvent, DepositEvent, FillEvent } from '../api/types'
 import { krw, qty as fmtQty } from '../lib/format'
+import { useActivity } from './activityLog'
 import s from './FillToasts.module.css'
 
 /**
@@ -18,6 +19,15 @@ import s from './FillToasts.module.css'
  *
  * 첫 요청은 since 없이 보낸다 — 지금 위치만 받아오고 과거 체결은 띄우지
  * 않는다. 화면을 열자마자 지난 알림이 쏟아지면 그건 알림이 아니라 소음이다.
+ *
+ * [실행 로그에도 남긴다 — 2026-08-03]
+ * 예전에는 이 알림이 8초 뜨고 사라지는 것이 전부였다. 그래서 스케줄러가
+ * 도는 동안 매매가 2~3건씩 일어나도 실행 로그에는 아무것도 안 쌓였다 —
+ * 로그에 쓰는 곳이 전부 '사용자가 버튼을 누른 자리' 뿐이었기 때문이다.
+ * 서버에서 도는 스케줄러는 화면에 닿을 길이 아예 없었다.
+ *
+ * 이벤트 커서(seq)를 이미 여기가 들고 있으므로 폴링을 하나 더 만들지 않고
+ * 여기서 로그로도 흘려보낸다. 같은 자료, 두 개의 출구.
  */
 const POLL_MS = 3_000
 const SHOW_MS = 8_000
@@ -26,6 +36,11 @@ export function FillToasts() {
   const [items, setItems] = useState<AppEvent[]>([])
   const seq = useRef<number | null>(null)
   const timers = useRef<number[]>([])
+  const activity = useActivity()
+  // effect 안에서 최신 activity 를 쓰되, 이것 때문에 폴링이 재시작되지는
+  // 않게 한다. deps 에 넣으면 렌더마다 setInterval 이 다시 걸린다.
+  const activityRef = useRef(activity)
+  activityRef.current = activity
 
   useEffect(() => {
     let alive = true
@@ -43,6 +58,39 @@ export function FillToasts() {
         if (r.events.length === 0) return
 
         setItems((prev) => [...prev, ...r.events].slice(-3))
+
+        // 실행 로그에도 남긴다. 알림은 8초 뒤 사라지지만 로그는 남는다 —
+        // "사람이 안 봐도 봇이 알아서 돈다" 는 주장의 증거가 화면에
+        // 남아야 주장이 된다.
+        activityRef.current.push(
+          'auto',
+          r.events.map((e) =>
+            e.kind === 'fill'
+              ? {
+                  step: e.side === 'buy' ? 'auto-buy' : 'auto-sell',
+                  봇: e.bot_name,
+                  종목: `${e.flag} ${e.company || e.ticker}`,
+                  수량: fmtQty(e.qty),
+                  체결가: `$${(e.price_micro / 1e6).toFixed(2)}`,
+                  금액: krw(e.gross_krw),
+                  ...(e.pnl_micro !== null && {
+                    실현손익: `${e.pnl_micro >= 0 ? '+' : ''}${(e.pnl_micro / 1e6).toFixed(2)} USDC`,
+                  }),
+                  사유: e.reason,
+                  tx: e.tx,
+                  explorer: e.explorer ?? undefined,
+                }
+              : {
+                  step: 'auto-deposit',
+                  봇: e.bot_name,
+                  금액: krw(e.amount_krw),
+                  출처: e.source,
+                  tx: e.tx,
+                  explorer: e.explorer ?? undefined,
+                },
+          ),
+        )
+
         for (const e of r.events) {
           timers.current.push(
             window.setTimeout(
