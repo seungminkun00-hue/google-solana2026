@@ -534,6 +534,25 @@ RANGES = {
 }
 
 
+def _window_return_pct(bot_id: str, since: float | None) -> float | None:
+    """구간 수익률 = 그 구간에 실현한 손익 ÷ 그 구간에 투입한 원가.
+
+    입출금은 분자에도 분모에도 들어가지 않는다. 돈을 넣는 것은 성과가
+    아니기 때문이다 — 이게 잔고 기준 계산과의 유일하고 결정적인 차이다.
+
+    구간 안에 매수가 없으면 나눌 것이 없으므로 None 이다. 0% 가 아니다.
+    화면은 None 이면 총 수익률로 되돌아간다.
+    """
+    fills = JOURNAL.fills_of(bot_id)
+    if since is not None:
+        fills = [f for f in fills if f.get("ts", 0) >= since]
+    invested = sum(f["gross_micro"] for f in fills if f["side"] == "buy")
+    if invested <= 0:
+        return None
+    realized = sum(f["pnl_micro"] or 0 for f in fills if f["side"] == "sell")
+    return round(realized / invested * 100, 2)
+
+
 def _equity_series(bot_id: str, key: str) -> dict:
     """수익률 곡선.
 
@@ -545,9 +564,17 @@ def _equity_series(bot_id: str, key: str) -> dict:
     since = None if window is None else time.time() - window
     pts = JOURNAL.equity_of(bot_id, since)
 
-    first = pts[0]["total"] if pts else 0
-    last = pts[-1]["total"] if pts else 0
-    pct = round((last - first) / first * 100, 2) if first > 0 and len(pts) >= 2 else None
+    # ⚠️ 구간 수익률을 **잔고 증감으로 재지 않는다.**
+    #
+    # [버그 2026-08-03] 예전에는 (마지막 평가액 - 처음 평가액) / 처음 평가액
+    # 이었다. 그러면 입금만 해도 수익률이 뛴다. 봇이 빈 지갑으로 시작하게
+    # 바꾼 뒤로는 특히 심해서, $50 을 넣으면 100,000% 같은 숫자가 나왔다 —
+    # 번 게 아니라 넣은 것인데.
+    #
+    # 입출금은 성과가 아니다. 총 수익률(_return_pct)이 이미 '손익 ÷ 투입
+    # 원가' 로 정의돼 있으므로 구간도 같은 자를 쓴다. 구간 안에 매매가
+    # 없으면 None 이고, 그때 화면은 총 수익률로 되돌아간다.
+    pct = _window_return_pct(bot_id, since)
 
     span = (pts[-1]["ts"] - pts[0]["ts"]) if len(pts) >= 2 else 0.0
     return {
