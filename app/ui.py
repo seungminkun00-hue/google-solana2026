@@ -1481,6 +1481,7 @@ async def delete_preflight(bot_id: str, session: str = Depends(session_id)):
 
 @router.delete("/bots/{bot_id}")
 async def delete_bot_ui(bot_id: str, close_positions: bool = True,
+                        force: bool = False,
                         _: None = Depends(require_admin),
                         session: str = Depends(session_id)):
     """봇을 지운다. 열린 포지션이 있으면 먼저 청산한다.
@@ -1488,6 +1489,16 @@ async def delete_bot_ui(bot_id: str, close_positions: bool = True,
     main.delete_bot 은 포지션이 남아 있으면 409로 거절한다 — 청산할 주체가
     사라진 포지션은 영영 닫히지 않기 때문이다. 여기서는 그 앞단계를
     대신 밟아준다. 청산 자체는 기존 /close-all 라우트가 한다.
+
+    [2026-08-03] 청산이 실패해도 **이유를 알려준다.**
+    예전에는 /settle 의 예외가 close_all 을 뚫고 올라와 이 라우트가
+    plain text 500 이 됐다. 화면에는 `Unexpected token 'I'` 만 떴다 —
+    사용자는 왜 안 지워지는지 알 방법이 없었다.
+
+    force=true 면 청산 못 한 포지션 기록을 버리고 삭제한다. 체인 쪽
+    문제로 영원히 안 팔리는 포지션 때문에 봇이 지워지지도 않는 상태를
+    풀어주는 비상구다. 기본값이 아닌 이유는, 그 포지션의 토큰이 봇
+    지갑에 그대로 남기 때문이다 — 버리는 것은 기록이지 자산이 아니다.
     """
     from app.main import close_all, delete_bot
     _get_bot(bot_id, session)
@@ -1499,14 +1510,41 @@ async def delete_bot_ui(bot_id: str, close_positions: bool = True,
     fills = len(JOURNAL.fills_of(bot_id))
 
     closed = 0
+    problems: list[dict] = []
     if close_positions and BOOK.of_bot(bot_id):
         result = await close_all(bot_id, None)
         closed = result["closed"]
+        problems = [x for x in result["results"] if not x.get("ok")]
+
+    # 청산을 시도했는데도 남아 있으면, 그 이유를 그대로 올려보낸다.
+    # main.delete_bot 이 어차피 409 로 막을 텐데, 거기서 나오는 메시지는
+    # "열린 포지션이 있습니다" 뿐이라 왜 못 닫았는지가 빠진다.
+    stuck = BOOK.of_bot(bot_id)
+    if stuck and not force:
+        raise HTTPException(409, {
+            "error": f"청산하지 못한 포지션 {len(stuck)}건이 있어 삭제하지 않았습니다",
+            "closed": closed,
+            "stuck": [{"ticker": p.ticker, "receipt_id": p.receipt_id}
+                      for p in stuck],
+            "reasons": [p.get("error", "")[:200] for p in problems][:3],
+            "hint": "체인 쪽 문제로 청산이 안 되는 경우입니다. 잠시 뒤 다시 "
+                    "시도하거나, force=true 로 포지션 기록을 버리고 삭제할 "
+                    "수 있습니다 (그 종목 토큰은 봇 지갑에 남습니다)."})
+
+    abandoned = []
+    if stuck and force:
+        # 기록만 버린다. 자산은 체인에 그대로 있고, 지갑 주소도
+        # wallets/ 에 남아 있으므로 나중에 손으로 회수할 수 있다.
+        for p in stuck:
+            BOOK.close(p.receipt_id)
+            abandoned.append({"ticker": p.ticker, "receipt_id": p.receipt_id})
 
     deleted = await delete_bot(bot_id, None)
     OWNER_LOG.add("bot_deleted", session=session, bot_id=bot_id, name=name,
-                  detail=f"거래 {fills}건 · API {calls}회 · 청산 {closed}건")
-    return {**deleted, "closed_positions": closed}
+                  detail=f"거래 {fills}건 · API {calls}회 · 청산 {closed}건"
+                         + (f" · 포기 {len(abandoned)}건" if abandoned else ""))
+    return {**deleted, "closed_positions": closed,
+            "abandoned_positions": abandoned}
 
 
 # ══════ 봇 정지·재개 ═══════════════════════════════════════════════

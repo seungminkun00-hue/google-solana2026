@@ -59,17 +59,42 @@ async function request<T>(
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers })
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+
+  // JSON 이 아닐 수 있다 — 이걸 전제하지 않은 것이 버그였다.
+  //
+  // [버그 2026-08-03] 예전에는 `JSON.parse(text)` 를 그냥 했다. 서버가
+  // 처리되지 않은 예외로 죽으면 FastAPI 는 **plain text** "Internal Server
+  // Error" 를 돌려주는데, 그걸 파싱하다 터지면서 사용자에게는
+  //     Unexpected token 'I', "Internal S"... is not valid JSON
+  // 이 떴다. 원인과 아무 상관 없는 메시지라, 실제로 무슨 일이 일어났는지가
+  // 화면에서 완전히 사라졌다. 서버 500 을 전부 이 한 문장으로 덮은 셈이다.
+  let data: unknown = null
+  let parseFailed = false
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      parseFailed = true
+    }
+  }
+  const d = (data as { detail?: unknown })?.detail ?? data
 
   if (!res.ok) {
     // FastAPI 는 에러를 {detail: ...} 로 싼다. detail 이 dict 면
     // 서버가 넣어둔 hint 가 사용자에게 보여줄 만한 문장이다.
-    const d = data?.detail ?? data
-    const msg =
-      typeof d === 'string'
+    const obj = d as { error?: string; hint?: string } | null
+    const msg = parseFailed
+      ? `서버 오류 (${res.status}): ${text.trim().slice(0, 160)}`
+      : typeof d === 'string'
         ? d
-        : (d?.error ?? d?.hint ?? `요청 실패 (${res.status})`)
+        : (obj?.error ?? obj?.hint ?? `요청 실패 (${res.status})`)
     throw new ApiError(res.status, msg, d)
+  }
+  if (parseFailed) {
+    // 200 인데 JSON 이 아니다. 라우트를 못 찾아 SPA 의 index.html 이
+    // 돌아온 경우가 대표적이다 — 조용히 넘기면 화면이 빈 채로 남는다.
+    throw new ApiError(res.status,
+      `서버가 JSON 이 아닌 응답을 보냈습니다: ${text.trim().slice(0, 160)}`)
   }
   return data as T
 }
@@ -169,9 +194,15 @@ export const api = {
   deletePreflight: (id: string) =>
     request<DeletePreflight>(`/ui/bots/${id}/delete-preflight`),
 
-  deleteBot: (id: string) =>
-    request<{ deleted: string; closed_positions: number }>(
-      `/ui/bots/${id}?close_positions=true`,
+  // force 는 청산이 안 되는 포지션 때문에 봇이 영영 안 지워질 때의 비상구다.
+  // 기록만 버리고 삭제한다 — 그 종목 토큰은 봇 지갑에 남는다.
+  deleteBot: (id: string, force = false) =>
+    request<{
+      deleted: string
+      closed_positions: number
+      abandoned_positions: { ticker: string; receipt_id: string }[]
+    }>(
+      `/ui/bots/${id}?close_positions=true&force=${force}`,
       { method: 'DELETE', admin: true },
     ),
 

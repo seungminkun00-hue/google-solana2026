@@ -798,13 +798,39 @@ async def close_all(bot_id: str, _: None = Depends(require_operator)):
     """
     get_bot(bot_id)
     results = []
-    transport = httpx.ASGITransport(app=app)
+    # raise_app_exceptions=False 가 중요하다.
+    #
+    # [버그 2026-08-03] 기본값은 True 라, /settle 안에서 처리되지 않은
+    # 예외가 나면 **여기까지 그대로 올라온다**. devnet 청산은 실패할 수
+    # 있는 일인데(Blockhash not found·토큰계정 없음 등) 그때마다 이 라우트
+    # 전체가 plain text "Internal Server Error" 500 이 됐다.
+    # 그 응답은 JSON 이 아니라서 화면은 `Unexpected token 'I'` 라는,
+    # 원인과 아무 상관 없는 메시지만 보여줬다 — 포지션 하나가 안 팔린다는
+    # 사실이 화면에 도달할 방법이 없었다.
+    #
+    # False 로 두면 하위 요청의 예외가 500 '응답' 이 되어 여기서 읽을 수
+    # 있다. 한 건이 실패해도 나머지는 계속 청산한다.
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url=BASE,
                                  timeout=120, headers=INTERNAL_HEADERS) as c:
         for pos in BOOK.of_bot(bot_id):
-            r = await c.post(f"{BASE}/settle/{pos.receipt_id}")
-            results.append(r.json() if r.status_code == 200 else r.text[:120])
-    return {"closed": len(results), "results": results}
+            row = {"receipt_id": pos.receipt_id, "ticker": pos.ticker}
+            try:
+                r = await c.post(f"{BASE}/settle/{pos.receipt_id}")
+                if r.status_code == 200:
+                    row.update(ok=True, **r.json())
+                else:
+                    row.update(ok=False, error=r.text[:300],
+                               status=r.status_code)
+            except Exception as e:                    # noqa: BLE001
+                row.update(ok=False,
+                           error=f"{type(e).__name__}: {str(e)[:300]}")
+            results.append(row)
+    ok = [x for x in results if x.get("ok")]
+    bad = [x for x in results if not x.get("ok")]
+    # closed 는 '실제로 청산된 수' 다. 예전에는 시도한 수를 세서, 전부
+    # 실패해도 "3건 청산" 이라고 보고했다.
+    return {"closed": len(ok), "failed": len(bad), "results": results}
 
 
 # ══════ 자동 실행 스케줄러 ═════════════════════════════════════════
