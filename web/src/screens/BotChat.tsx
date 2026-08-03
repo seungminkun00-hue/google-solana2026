@@ -4,6 +4,7 @@ import { api, useApi } from '../api/client'
 import { BotAvatar } from '../components/BotAvatar'
 import { PhoneFrame } from '../components/PhoneFrame'
 import { Back, Settings } from '../components/Icon'
+import { useActivity } from '../components/activityLog'
 import s from './BotChat.module.css'
 
 type Msg = {
@@ -33,6 +34,11 @@ export function BotChat() {
   const [busy, setBusy] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
   const seq = useRef(1)
+  // 대화로 시킨 매매도 [지금 일해보기] 와 같은 실행 로그에 남긴다.
+  // 예전에는 여기서만 안 보냈다 — 백엔드는 진짜로 체결하고 응답에
+  // trade/order 를 실어 보내는데 이 화면이 그걸 그냥 버렸다. 그래서
+  // "대화로 매수 지시한 건 왜 로그에 안 뜨지?" 가 됐다.
+  const activity = useActivity()
 
   // 예시 질문만 받아온다. 예전에는 '__init__' 을 대화로 보냈는데, 그건
   // 화면을 열 때마다 뜻 없는 질문 하나를 모델에 던지는 셈이었다.
@@ -85,6 +91,23 @@ export function BotChat() {
         ),
       )
       if (r.suggestions?.length) setSuggestions(r.suggestions)
+
+      // 서버가 이 대화를 '주문' 으로 읽었을 때만 로그를 남긴다. 모든
+      // 대화를 남기면 로그가 잡담으로 차서 정작 돈이 움직인 줄이 묻힌다.
+      if (r.order) {
+        const who = head?.profile.display_name || id
+        activity.begin('cycle', `앱 · 대화 지시 — ${who}`)
+        activity.push('cycle', [
+          {
+            step: r.order.executed ? 'chat-order' : 'chat-order-rejected',
+            지시: r.order.instruction ?? t,
+            종목: r.order.ticker ?? '—',
+            방향: r.order.side === 'sell' ? '매도' : '매수',
+            결과: r.order.note,
+            ...(r.trade ?? {}),
+          },
+        ])
+      }
     } catch (e) {
       setMsgs((m) =>
         m.map((x) =>

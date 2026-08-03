@@ -149,7 +149,12 @@ function Row({ e }: { e: LogEntry }) {
     )
   }
 
-  const bad = e.step === 'error' || e.step === 'blocked' || 'blocked' in e.rest
+  const bad =
+    e.step === 'error' ||
+    e.step === 'blocked' ||
+    e.step === 'stream-failed' ||
+    e.step === 'chat-order-rejected' ||
+    'blocked' in e.rest
   const label = STEP_LABEL[e.step] ?? e.step
   const pairs = Object.entries(e.rest)
 

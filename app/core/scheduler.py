@@ -33,6 +33,10 @@ class Scheduler:
         self.started_at: float | None = None
         self.errors: dict[str, int] = {}          # bot_id → 연속 실패 횟수
         self.log: list[dict] = []                 # 최근 활동 (최대 200건)
+        # 마지막 주기가 언제 돌았나. 화면의 상태 램프가 '다음 실행까지
+        # 몇 초' 를 보여주려면 이게 있어야 한다. 없으면 켜져 있다는 것만
+        # 알고 살아 있는지는 알 수 없다 — 멈춘 램프와 구분이 안 된다.
+        self.last_tick_at: float | None = None
 
     # ── 제어 ────────────────────────────────────────────────────
     def start(self, interval_seconds: int | None = None) -> dict:
@@ -56,9 +60,14 @@ class Scheduler:
 
     def status(self) -> dict:
         uptime = time.time() - self.started_at if self.started_at else 0
+        since = (time.time() - self.last_tick_at) if self.last_tick_at else None
         return {"running": self.running, "interval_seconds": self.interval,
                 "ticks": self.tick_count, "uptime_seconds": round(uptime),
-                "error_counts": dict(self.errors)}
+                "error_counts": dict(self.errors),
+                "seconds_since_tick": round(since) if since is not None else None,
+                # 다음 주기까지 남은 초. 램프 옆의 카운트다운이 이걸 쓴다.
+                "next_tick_in": (max(0, round(self.interval - since))
+                                 if self.running and since is not None else None)}
 
     def _record(self, who: str, event: str, detail: dict) -> None:
         self.log.append({"ts": time.time(), "who": who,
@@ -69,6 +78,7 @@ class Scheduler:
     async def _loop(self) -> None:
         while self.running:
             self.tick_count += 1
+            self.last_tick_at = time.time()
             try:
                 await self._tick()
             except asyncio.CancelledError:

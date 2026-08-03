@@ -108,6 +108,23 @@ async def _restore(session: str) -> bool:
         return False
 
 
+async def _top_up_sol(wallet: str) -> None:
+    """심사위원 지갑의 devnet SOL 잔고가 0 이 아니게 해 둔다.
+
+    수수료는 fee_payer 가 내므로 기능상으로는 필요 없다. 그런데 팬텀은
+    **연결된 지갑**의 SOL 을 보고 "이 거래에 대한 SOL이 충분하지 않습니다"
+    라는 빨간 경고를 띄운다 — 실제로는 나갈 트랜잭션인데도. 시연에서
+    심사위원이 그걸 보면 '고장난 데모' 로 읽히므로 경고할 이유를 없앤다.
+
+    이미 SOL 이 있으면 아무것도 하지 않는다(fund_sol 이 먼저 확인한다).
+    """
+    fund = getattr(LEDGER, "fund_sol", None)
+    if fund is None:                       # mock 원장 — 온체인 개념이 없다
+        return
+    from app.adapters.devnet_ledger import JUDGE_SOL_TOPUP
+    await fund(wallet, JUDGE_SOL_TOPUP)
+
+
 def _ensure_devnet() -> None:
     """위임 인출이 가능한 원장인지 확인한다.
 
@@ -150,6 +167,10 @@ async def register(body: RegisterBody,
         raise HTTPException(400, str(e)) from e
 
     await LEDGER.ensure_external_account(wallet)
+    # 팬텀의 'SOL 부족' 경고를 없애기 위한 소액 지급. 기능상 필요는 없고
+    # (수수료는 fee_payer 가 낸다) 순전히 화면 때문이다 — 자세한 이유는
+    # DevnetLedger.fund_sol 주석. 실패해도 등록은 그대로 진행된다.
+    await _top_up_sol(wallet)
     # 재시작해도 잃지 않도록 주소를 남긴다(공개키뿐 — 비밀 없음).
     _remember(session, str(pubkey))
     status = await LEDGER.delegate_status(wallet)
@@ -202,6 +223,11 @@ async def approve_tx(body: ApproveBody,
     delegate = f"user-treasury@{body.bot_id}"
     if delegate not in LEDGER.keypairs:
         raise HTTPException(404, f"봇 지갑 없음: {delegate}")
+
+    # 팬텀 창이 뜨기 **직전**이 SOL 잔고를 채울 마지막 기회다. register 에도
+    # 같은 호출이 있지만, 이 변경 전에 이미 등록해 둔 지갑은 그 경로를 다시
+    # 지나지 않는다(_restore 로 복원될 뿐이다). 여기서 한 번 더 받쳐 준다.
+    await _top_up_sol(judge_wallet(session))
 
     tx_b64 = await LEDGER.build_approve_tx(
         judge_wallet(session), delegate, body.amount)
@@ -326,9 +352,25 @@ def _preflight(bot) -> list[dict]:
         notes.append({"reset": "spent_today", "was": bot.tracker.spent_today})
         bot.tracker.spent_today = 0
         bot.tracker.decision_spent = 0
-    if bot.killed:
+    # [버그 2026-08-03] 킬 스위치는 두 곳에 산다:
+    #   · bot.killed              — 룰북 게이트(pipeline.rulebook_gate)와 스케줄러가 본다
+    #   · tracker.policy.killed   — x402 결제(x402_client.SpendTracker.check)가 본다
+    # 정지시키는 쪽은 전부 둘 다 세운다(main.kill_bot·ui.pause·스케줄러 자동정지).
+    # 그런데 여기서는 앞의 것만 껐다. 그 결과 화면상 봇은 멀쩡한데 첫 유료
+    # 호출이 KillSwitchActive 로 막혀 사이클이 scout 단계에서 끝났다 —
+    # "정지 상태가 아닌데 아무것도 안 산다" 는 가장 알아내기 어려운 형태의 고장.
+    # 해제도 반드시 둘 다여야 한다.
+    if bot.killed or bot.tracker.policy.killed:
         notes.append({"reset": "killed", "was": True})
         bot.killed = False
+        bot.tracker.policy.killed = False
+        # 스케줄러의 연속 실패 카운터도 같이 지운다. 이 값이 5로 남아 있으면
+        # 킬을 풀어도 _tick 이 그 봇을 영원히 건너뛴다(scheduler.py 의
+        # MAX_CONSECUTIVE_ERRORS 검사). 자동매매가 조용히 안 돌아오는데
+        # 화면에는 아무 단서도 안 남는다.
+        from app.core.scheduler import SCHEDULER
+        if SCHEDULER.errors.pop(bot.bot_id, None):
+            notes.append({"reset": "scheduler_errors"})
 
     # 편향이 줄 수 있는 최대치(0.95/0.95)로 미리 물어본다. 이래도 안
     # 통과하면 사이클을 돌려봐야 결과가 같다 — 미리 이유를 말해준다.
@@ -382,19 +424,20 @@ async def _buy_events(bot_id: str, draw: int, session: str,
                      reason=f"심사위원 지갑 잔고 부족: {st['balance']} < {draw}")
             return
 
-        # [2] 위임 인출 — ★ 심사위원 서명 없이 돈이 빠져나가는 순간
-        treasury = f"user-treasury@{bot_id}"
-        yield ev("pull-start", frm=str(LEDGER.owner_pubkey(wallet)),
-                 to=treasury, amount=draw)
-        proof = await LEDGER.delegated_transfer(
-            wallet, treasury, draw, "judge-demo-deposit")
-        yield ev("pull-done", tx=proof.proof_id,
-                 explorer=EXPLORER.format(proof.proof_id),
-                 note="심사위원 추가 서명 없음 — 위임 권한으로 집행")
-
-        # [3] 시연 준비 — 반복 시연으로 생긴 상태만 되돌린다
+        # [2] 시연 준비 — 반복 시연으로 생긴 상태만 되돌린다
+        #
+        # ★ 이 블록은 반드시 인출([3])보다 **먼저** 와야 한다.
+        #   [순서 버그 2026-08-03] 예전에는 인출이 먼저였다. 그래서 봇이
+        #   킬 스위치나 노출 한도로 못 사는 상태여도 심사위원 지갑에서는
+        #   돈이 먼저 빠져나갔다 — 매수는 0건인데 지갑만 $5씩 줄었고,
+        #   위임 한도 $20 가 네 번 만에 바닥나 "위임 한도 부족" 으로
+        #   재서명을 반복하게 됐다. 팬텀이 매번 경고를 띄운 진짜 이유다.
+        #   막을 수 있는 이유로 막힐 거면, 돈이 움직이기 전에 막혀야 한다.
         from app.bots import BOTS
         from app.external import demo_bias
+        if bot_id not in BOTS:
+            yield ev("blocked", reason=f"봇 없음: {bot_id}")
+            return
         bot = BOTS[bot_id]
         for note in _preflight(bot):
             yield ev("preflight", **note)
@@ -402,7 +445,7 @@ async def _buy_events(bot_id: str, draw: int, session: str,
         from app.main import app as fastapi_app, INTERNAL_HEADERS, BASE
         transport = httpx.ASGITransport(app=fastapi_app)
 
-        # [3-b] 노출 한도 정리 — 리셋으로는 못 푸는 유일한 항목
+        # [2-b] 노출 한도 정리 — 리셋으로는 못 푸는 유일한 항목
         #
         # 총 노출은 '열린 포지션의 원가 합' 이라 시간을 되돌린다고
         # 줄어들지 않는다. 실제로 팔아야 준다. 시연을 열 번쯤 돌리면
@@ -425,6 +468,21 @@ async def _buy_events(bot_id: str, draw: int, session: str,
             yield ev("close-done",
                      closed=cl.json().get("closed") if cl.status_code == 200 else None,
                      exposure_after=BOOK.exposure(bot_id))
+
+        # [3] 위임 인출 — ★ 심사위원 서명 없이 돈이 빠져나가는 순간
+        #
+        # 여기까지 왔다는 것은 봇이 '살 수 있는 상태' 라는 뜻이다. 그래서
+        # 이 인출은 헛돈이 되지 않는다. 사이클이 체결까지 못 가는 경우는
+        # 여전히 있지만(뉴스 신규성·만다트 거절), 그건 판단의 결과지
+        # 우리가 미리 풀 수 있었던 잠금이 아니다.
+        treasury = f"user-treasury@{bot_id}"
+        yield ev("pull-start", frm=str(LEDGER.owner_pubkey(wallet)),
+                 to=treasury, amount=draw)
+        proof = await LEDGER.delegated_transfer(
+            wallet, treasury, draw, "judge-demo-deposit")
+        yield ev("pull-done", tx=proof.proof_id,
+                 explorer=EXPLORER.format(proof.proof_id),
+                 note="심사위원 추가 서명 없음 — 위임 권한으로 집행")
 
         # [4] 봇 사이클 — x402 결제·시그널·테제·룰북·체결이 전부 여기서
         filled = False
@@ -485,13 +543,25 @@ async def _buy_events(bot_id: str, draw: int, session: str,
 
 
 @router.get("/buy")
-async def buy(bot_id: str, draw: int = DEFAULT_DRAW) -> StreamingResponse:
-    """매수 버튼. 심사위원의 서명은 필요 없다 — 그게 요점이다."""
+async def buy(bot_id: str, draw: int = DEFAULT_DRAW,
+              session: str = "") -> StreamingResponse:
+    """매수 버튼. 심사위원의 서명은 필요 없다 — 그게 요점이다.
+
+    세션은 **쿼리 파라미터**로 받는다. 이 라우트는 EventSource(SSE)가
+    부르는데, EventSource 는 커스텀 헤더를 못 붙인다 — 다른 라우트처럼
+    Depends(session_id) 로 X-Session 헤더를 읽을 수가 없다.
+    프론트도 `&session=` 으로 보내고 있다(web/src/api/judge.ts).
+
+    [버그 2026-08-03] 이 파라미터가 통째로 빠져 있었다. 그런데 함수
+    본문은 session 을 쓰고 있어서, 부르는 즉시 NameError 로 500 이 났다.
+    즉 심사위원 패널의 매수 버튼은 지금까지 한 번도 동작한 적이 없다.
+    """
     _ensure_devnet()
+    session = clean(session)
     if not await _restore(session):
         raise HTTPException(400, "지갑을 먼저 등록하세요")
     return StreamingResponse(
-        _buy_events(bot_id, draw),
+        _buy_events(bot_id, draw, session),
         media_type="text/event-stream",
         # 프록시가 버퍼링하면 실시간이 아니게 된다.
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -602,11 +672,16 @@ async def sell(bot_id: str, payout: int | None = None,
     """매도·정산 버튼. 청산한 돈이 심사위원 지갑으로 돌아온다.
 
     payout 을 주지 않으면 user-treasury 잔고 전부를 반환한다.
+    세션을 쿼리로 받는 이유는 buy() 와 같다 — SSE 는 헤더를 못 붙인다.
+
+    [버그 2026-08-03] session 을 받아만 두고 _sell_events 에 넘기지
+    않아, 인자 부족으로 TypeError 가 났다(매수와 같은 계열의 사고).
     """
     _ensure_devnet()
+    session = clean(session)
     if not await _restore(session):
         raise HTTPException(400, "지갑을 먼저 등록하세요")
     return StreamingResponse(
-        _sell_events(bot_id, payout),
+        _sell_events(bot_id, payout, session),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

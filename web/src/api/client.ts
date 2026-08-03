@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   Apis, BotAi, ChatReply, DeletePreflight, Events, Meta, Overview,
-  ProfileBundle, RunResult, SellResult, Summary, Trades,
+  ProfileBundle, RunResult, Runtime, SellResult, Summary, Trades,
 } from './types'
 
 // vite.config.ts 가 /api 를 백엔드로 프록시한다.
@@ -108,6 +108,24 @@ export const api = {
   // 체결까지 실제로 일어나고, devnet 트랜잭션도 그만큼 실제로 남는다.
   run: (id: string, attempts = 2) =>
     request<RunResult>(`/ui/bots/${id}/run?attempts=${attempts}`, {
+      method: 'POST',
+      admin: true,
+    }),
+
+  // 실행 상태 — 목업 위 상태 램프가 폴링한다.
+  runtime: () => request<Runtime>('/ui/runtime'),
+
+  // 자동매매 켜기/끄기. 켜면 이 세션의 정지된 봇도 함께 되살린다.
+  scheduler: (on: boolean, intervalSeconds?: number) =>
+    request<Runtime & { woke?: string[] }>(
+      `/ui/runtime/scheduler?on=${on}` +
+        (intervalSeconds ? `&interval_seconds=${intervalSeconds}` : ''),
+      { method: 'POST', admin: true },
+    ),
+
+  // 단기 매매 모드. 익절·손절을 얕게, 보유시간을 짧게 바꾼다.
+  scalp: (on: boolean) =>
+    request<Runtime & { changed?: unknown[] }>(`/ui/runtime/scalp?on=${on}`, {
       method: 'POST',
       admin: true,
     }),

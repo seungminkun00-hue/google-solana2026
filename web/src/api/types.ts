@@ -220,8 +220,39 @@ export type ChatReply = {
   on_topic?: boolean
   /** 대화로 지시한 매매가 실제로 집행됐으면 그 결과. */
   trade?: Record<string, unknown> | null
+  /**
+   * 대화를 **주문으로 읽었을 때**의 결과. 집행 실패도 담긴다.
+   * 이게 있으면 실행 로그에 한 줄 남긴다 — trade 만 보면 거절된 주문이
+   * 화면 어디에도 안 남아서, 사용자는 시킨 게 씹혔는지 거절됐는지 모른다.
+   */
+  order?: {
+    executed: boolean
+    note: string
+    side?: string | null
+    ticker?: string | null
+    instruction?: string
+  } | null
   grounded?: string
   suggestions: string[]
+}
+
+/** 실행 상태. 아이폰 목업 위 상태 램프가 쓴다. */
+export type Runtime = {
+  /** 스케줄러가 돌고 **그리고** 살아 있는 봇이 있는가. 램프의 초록/회색. */
+  running: boolean
+  /** 스케줄러 자체의 on/off. 봇이 전부 정지면 running 은 false 여도 이건 true. */
+  scheduler_running: boolean
+  interval_seconds: number
+  /** 다음 주기까지 남은 초. 안 돌고 있으면 null. */
+  next_tick_in: number | null
+  ticks: number
+  uptime_seconds: number
+  bots: number
+  active_bots: number
+  paused_bots: number
+  /** 단기 매매 모드가 켜져 있는가. */
+  scalp: boolean
+  recent: { who: string; event: string; ts: number }[]
 }
 
 /** 상단 팝업 알림 한 건 (체결). */

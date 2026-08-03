@@ -58,6 +58,11 @@ MAX_TX_BYTES = 1_100         # 상한 1232에서 여유를 둔 실사용 상한
 # 잔고 캐시 수명. 짧게 잡는다 — 이건 성능 최적화이지 정확성을 양보하는
 # 장치가 아니다. 쓰기가 일어나면 TTL과 무관하게 즉시 무효화된다.
 SNAPSHOT_TTL = 2.0
+# 심사위원 지갑에 채워 줄 devnet SOL. 수수료 한 번이 5,000 lamports 이므로
+# 넉넉하지만, '쓰라고' 주는 게 아니라 팬텀의 SOL 부족 경고를 없애려고 준다.
+JUDGE_SOL_TOPUP = 5_000_000                  # 0.005 SOL
+# fee_payer 가 항상 남겨둬야 할 최소 SOL. 이 밑으로는 아무에게도 안 준다.
+SOL_FEE_RESERVE = 20_000_000                 # 0.02 SOL
 
 
 def _atomic_json(path: pathlib.Path, data) -> None:
@@ -722,6 +727,56 @@ class DevnetLedger:
         ix = create_idempotent_associated_token_account(
             self.fee_payer.pubkey(), self.owner_pubkey(name), self.mint)
         await self._send_fee_payer_only([ix], label=f"{name} 토큰계정")
+
+    async def fund_sol(self, name: str, lamports: int) -> str | None:
+        """외부 지갑에 devnet SOL 을 소액 채워 준다. 이미 있으면 안 보낸다.
+
+        [왜 필요한가 — 기능이 아니라 화면 때문이다]
+        위임 서명 트랜잭션의 수수료는 fee_payer 가 낸다. 그래서 심사위원은
+        SOL 이 0 이어도 서명·전송이 실제로 된다. 그런데 **팬텀은 연결된
+        지갑의 SOL 잔고를 보고** "이 거래에 대한 SOL이 충분하지 않습니다"
+        라는 빨간 경고를 띄운다. 수수료 지불자가 따로 있다는 걸 팬텀 UI 가
+        반영하지 않는다.
+
+        기능은 멀쩡한데 심사위원 눈에는 '실패할 거래' 로 보인다. 시연에서
+        그 오해는 치명적이라, 경고가 뜰 이유 자체를 없앤다.
+
+        보내는 양은 수수료 한 번(5,000 lamports)의 1000배다. 이걸로
+        무엇을 할 수 있게 하려는 게 아니라 잔고 0 을 면하게 하는 것이 전부다.
+
+        실패해도 예외를 올리지 않는다. SOL 지급은 시연의 곁가지고, 이것
+        때문에 지갑 등록 자체가 막히면 본말이 뒤집힌다.
+        """
+        from solders.system_program import TransferParams
+        from solders.system_program import transfer as sol_transfer
+
+        try:
+            dest = self.owner_pubkey(name)
+            have = (await self._rpc(self.client.get_balance, dest)).value
+            if have >= lamports:
+                return None                     # 이미 충분하다
+
+            # fee_payer 를 마르게 하지 않는다. 수수료를 못 내면 이 시스템의
+            # 모든 온체인 동작이 멈춘다 — SOL 인심보다 그쪽이 훨씬 비싸다.
+            ours = (await self._rpc(self.client.get_balance,
+                                    self.fee_payer.pubkey())).value
+            need = lamports - have
+            if ours - need < SOL_FEE_RESERVE:
+                print(f"  ⚠️ SOL 지급 건너뜀 — fee_payer 잔고 부족 "
+                      f"({ours / 1e9:.4f} SOL)")
+                return None
+
+            sig = await self._send_fee_payer_only(
+                [sol_transfer(TransferParams(
+                    from_pubkey=self.fee_payer.pubkey(),
+                    to_pubkey=dest,
+                    lamports=need))],
+                label=f"{name} SOL 지급")
+            print(f"  ◎ {name} 에 devnet SOL {need / 1e9:.4f} 지급")
+            return sig
+        except Exception as e:                            # noqa: BLE001
+            print(f"  ⚠️ SOL 지급 실패(무시): {str(e)[:90]}")
+            return None
 
     async def fund_external(self, name: str, amount: int) -> PaymentProof:
         """시연용 테스트 USDC 지급.

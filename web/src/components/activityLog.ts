@@ -76,6 +76,11 @@ export const STEP_LABEL: Record<string, string> = {
   done: '완료',
   blocked: '중단',
   error: '오류',
+  'stream-failed': '스트림 연결 실패 — 서버가 응답하지 않음',
+  // 대화로 시킨 매매. 거절도 남긴다 — 안 된 이유가 안 보이는 것이
+  // 안 된 것보다 나쁘다.
+  'chat-order': '대화 지시 — 주문 체결',
+  'chat-order-rejected': '대화 지시 — 실행되지 않음',
   // 사이클 단계 (양쪽 공통 — 지갑 시연은 앞에 cycle: 이 붙는다)
   'budget-check': '예산 점검',
   scout: '뉴스 구매 + 1차 스크리닝',

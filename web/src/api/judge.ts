@@ -123,23 +123,53 @@ function stream(
   onEnd: () => void,
 ): () => void {
   const es = new EventSource(url)
+  // 한 줄이라도 받았는가. 못 받고 끊긴 것과 다 받고 끝난 것은 완전히
+  // 다른 사건인데, 예전에는 둘 다 조용히 닫혀서 구분이 안 됐다.
+  let got = false
+  let ended = false
+
+  const finish = () => {
+    if (ended) return // onerror 는 정상 종료 뒤에도 뜰 수 있다
+    ended = true
+    es.close()
+    onEnd()
+  }
 
   es.onmessage = (m) => {
+    got = true
     const data = JSON.parse(m.data) as BuyEvent
     onEvent(data)
     // 서버가 스트림을 끝내면 EventSource 는 재연결을 시도한다.
     // 종료 신호를 받은 쪽에서 먼저 닫아야 같은 작업이 또 돌지 않는다.
     if (data.step === 'done' || data.step === 'error' || data.step === 'blocked') {
-      es.close()
-      onEnd()
+      finish()
     }
   }
+
+  /**
+   * 한 줄도 못 받고 끊겼으면 **로그에 남긴다.**
+   *
+   * [왜 — 2026-08-03] 예전에는 여기서 조용히 닫기만 했다. 그래서
+   * /judge/buy 가 500 을 내던 동안(session 인자 누락) 버튼을 눌러도
+   * 화면에 아무 일도 안 일어났다. 로그도, 오류 메시지도, 아무것도.
+   * "눌러도 반응이 없다" 는 가장 고치기 어려운 형태의 고장이다 —
+   * 어디서부터 봐야 할지 단서가 0 이기 때문이다.
+   *
+   * EventSource 는 HTTP 상태코드를 알려주지 않는다(스펙상 못 본다).
+   * 그래서 상태코드 대신 '연결 자체가 실패했다'는 사실만 정확히 남긴다.
+   * 짐작한 원인을 지어내는 것보다 낫다.
+   */
   es.onerror = () => {
-    es.close()
-    onEnd()
+    if (!got && !ended) {
+      onEvent({
+        step: 'stream-failed',
+        t: 0,
+        reason:
+          '서버가 스트림을 열지 못했습니다. 지갑 등록·devnet 모드를 확인하세요. ' +
+          '(브라우저 개발자도구 Network 탭에서 /judge 요청의 상태코드를 보면 원인이 나옵니다)',
+      } as BuyEvent)
+    }
+    finish()
   }
-  return () => {
-    es.close()
-    onEnd()
-  }
+  return finish
 }

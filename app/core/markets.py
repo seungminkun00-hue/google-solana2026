@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 WALLET_DIR = pathlib.Path("wallets")
 CANDIDATES_PATH = WALLET_DIR / "market_candidates.json"
@@ -74,6 +75,48 @@ def _minted() -> set[str]:
         return set()
 
 
+# 해외 종목의 한국어 별칭.
+#
+# [왜 손으로 적나]
+# 국내 종목은 KIS 가 "삼성전자" 처럼 한글 이름을 주지만, 해외 종목은
+# 이름 자리에 티커를 그대로 준다(NVDA → "NVDA"). 그래서 한국어로 쓰는
+# 화면인데 "엔비디아 사줘" 를 못 알아들었다.
+#
+# 지어낸 이름이 아니라 국내에서 통용되는 표기이고, 짧은 것(3글자 미만)은
+# 넣지 않는다 — find_tickers 가 3글자 미만을 건너뛰기도 하고, 짧은 별칭은
+# 문장 어디에나 우연히 들어가 오탐을 낸다.
+_KO_ALIASES: dict[str, tuple[str, ...]] = {
+    "AAPL": ("애플",),
+    "MSFT": ("마이크로소프트", "마소"),
+    "NVDA": ("엔비디아",),
+    "GOOGL": ("구글", "알파벳"),
+    "AMZN": ("아마존",),
+    "META": ("메타", "페이스북"),
+    "AVGO": ("브로드컴",),
+    "TSLA": ("테슬라",),
+    "COST": ("코스트코",),
+    "NFLX": ("넷플릭스",),
+    "AMD": ("에이엠디",),
+    "PEP": ("펩시", "펩시코"),
+    "ADBE": ("어도비",),
+    "CSCO": ("시스코",),
+    "TMUS": ("티모바일",),
+    "INTC": ("인텔",),
+    "QCOM": ("퀄컴",),
+    "AMAT": ("어플라이드머티리얼즈",),
+    "BKNG": ("부킹홀딩스",),
+    # 일본
+    "7203": ("도요타", "토요타"),
+    "6758": ("소니",),
+    "9984": ("소프트뱅크",),
+    "6861": ("키엔스",),
+    "7974": ("닌텐도",),
+    "6098": ("리크루트",),
+    "4063": ("신에츠",),
+    "6501": ("히타치",),
+}
+
+
 def _build() -> tuple[list[dict], dict, dict, dict]:
     raw = _load_raw()
     minted = _minted()
@@ -116,6 +159,10 @@ def _build() -> tuple[list[dict], dict, dict, dict]:
     for t, n in names.items():
         cand = {t.lower(), n.lower()}
         cand.discard("")
+        # 해외 종목은 KIS 가 이름을 티커로만 준다(NVDA → "NVDA"). 그래서
+        # "엔비디아 사줘" 가 종목 없는 주문이 됐다 — 한국어로 쓰는 화면인데
+        # 한국어 종목명을 못 알아듣는 셈이었다. 아래 표로 메운다.
+        cand |= {a.lower() for a in _KO_ALIASES.get(t, ())}
         aliases[t] = tuple(sorted(cand))
 
     return markets, quote_specs, names, aliases, flags
@@ -171,11 +218,50 @@ def find_tickers(text: str, allowed: list[str] | None = None) -> list[str]:
     for t in pool:
         b = base(t)
         for name in ALIASES.get(b, (b.lower(),)):
-            if len(name) >= 3 and name in low:
+            if _alias_hit(name, low):
                 if b not in out:
                     out.append(b)
                 break
     return out
+
+
+_HANGUL_ONLY = re.compile(r"^[가-힣]+$")
+
+# 종목명 뒤에 붙는 한국어 조사. 긴 것부터 적는다 — 정규식 대안은 먼저
+# 맞는 것을 택하므로 "이"가 "이랑"보다 앞에 오면 "구글이랑"에서 "이"만
+# 먹고 뒤에 "랑"이 남아 경계 검사에 걸린다.
+_PARTICLES = ("이랑", "에서", "으로", "부터", "까지", "보다", "처럼", "한테",
+              "에게", "은", "는", "이", "가", "을", "를", "와", "과", "랑",
+              "도", "만", "에", "의", "로")
+_PARTICLE_RE = "|".join(_PARTICLES)
+
+
+def _alias_hit(name: str, low: str) -> bool:
+    """별칭이 문장에 나왔는가.
+
+    3글자 이상은 그냥 부분일치로 본다(기존 규칙).
+
+    2글자는 **한글일 때만** 허용하고, 더 긴 낱말의 일부이면 세지 않는다.
+    애플·구글·메타·소니·인텔 처럼 실제로 2글자인 종목명이 여럿인데,
+    3글자 규칙을 그대로 두면 "애플 사줘" 가 종목 없는 주문이 된다.
+    반대로 경계를 안 보면 "메타버스" 가 META 로 잡힌다.
+
+    경계는 '조사까지만 허용' 으로 잡는다. 한국어는 조사가 명사에 붙어
+    쓰이므로("구글이랑") 뒤에 한글이 오면 무조건 배제할 수가 없다. 대신
+    붙을 수 있는 것을 조사로 한정하면 둘이 갈린다:
+        구글 + 이랑  → 조사      → 종목
+        메타 + 버스  → 조사 아님 → 다른 낱말
+        애플 + 리케이션 → 조사 아님 → 다른 낱말
+
+    2글자 라틴 별칭은 계속 막는다. 일본 종목코드('7203')나 짧은 티커는
+    문장 어디에나 우연히 들어갈 수 있고, 그게 원래 이 규칙의 이유였다.
+    """
+    if len(name) >= 3:
+        return name in low
+    if len(name) < 2 or not _HANGUL_ONLY.match(name):
+        return False
+    pat = rf"{re.escape(name)}(?:{_PARTICLE_RE})?(?![가-힣])"
+    return re.search(pat, low) is not None
 
 
 def tickers_for(keys: list[str]) -> list[str]:

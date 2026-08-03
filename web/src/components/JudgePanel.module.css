@@ -208,6 +208,44 @@
   overflow-wrap: anywhere;
 }
 
+/* 팬텀이 띄울 경고를 **미리** 알려주는 상자.
+   경고를 본 뒤에 해명하면 변명으로 들린다. 보기 전에 읽으면 설명이 된다.
+   그래서 위치가 '위임 서명' 버튼 바로 위여야 하고, 색도 경고색이어야 한다 —
+   차분한 회색 안내문으로 두면 아무도 안 읽고 누른 뒤에 놀란다. */
+.expect {
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-strong);
+  background: #fff8e6;
+  border: 1px solid #ffd98a;
+  border-left: 3px solid #f5a623;
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+
+.expectTitle {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.expectList {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.expectList li {
+  margin-top: 2px;
+}
+
+.expectWhy {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed #ffd98a;
+  color: var(--text-sub);
+}
+
 /* ── 로그 ─────────────────────────────────────────────────────── */
 .logHeadBar {
   display: flex;

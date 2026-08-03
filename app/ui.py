@@ -210,11 +210,164 @@ def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
 
     조회 라우트에는 붙이지 않는다 — 기존 /bots, /bots/{id}/state 와 같은
     수준으로 열어둔다. 붙는 곳은 봇을 만들거나 고치거나 멈추는 곳뿐이다.
+
+    ⚠️ 정의가 이 위치인 이유: Depends(require_admin) 은 라우트를 **선언할
+    때** 평가된다. 아래쪽에 두면 그보다 위에 있는 라우트가 NameError 로
+    죽는다(실제로 /runtime 을 추가하다 그렇게 됐다).
     """
     if x_admin_token != config.ADMIN_TOKEN:
         raise HTTPException(403, {
             "error": "관리자 인증 실패",
             "hint": "봇을 만들거나 고치는 요청에는 X-Admin-Token 헤더가 필요합니다."})
+
+
+# ══════ 실행 상태 — 아이폰 목업 위 상태 램프 ═══════════════════════════
+#
+# [왜 필요한가]
+# 자동매매의 값어치는 '사람이 안 보는 동안에도 돈다' 는 것인데, 화면에는
+# 그게 도는 중인지 꺼져 있는지가 어디에도 안 나왔다. 스케줄러 상태는
+# /scheduler/status 로 볼 수 있었지만 그건 API 이고, 앱을 보는 사람에게는
+# 없는 것과 같았다. 켜져 있다는 사실이 안 보이면 자동매매는 시연에서
+# 존재하지 않는 기능이 된다.
+
+# 단기 매매 모드의 룰북 값. '활발하게 움직이는 것' 자체가 목적이라
+# 익절·손절을 얕게, 보유시간을 짧게, 하루 거래 한도를 크게 잡는다.
+#
+# ⚠️ 이건 좋은 투자 전략이 아니라 **시연용 설정**이다. 얕은 익절·손절은
+#    수수료와 슬리피지를 못 이기는 구간이고, 실제 계좌에 쓰면 잦은 매매가
+#    수익을 갉아먹는다. 화면에서 매매가 자주 일어나는 걸 보여주려는 값이다.
+SCALP = {
+    "take_profit_pct": 0.4,      # 기본 5.0 — 조금만 올라도 판다
+    "stop_loss_pct": 0.3,        # 기본 3.0 — 조금만 내려도 끊는다
+    # 기본 24시간 → 3분.
+    #
+    # [실측 2026-08-03] 처음에는 30분(0.5)으로 잡았는데, 100초를 돌려도
+    # 청산이 **0건**이었다. 익절·손절은 시세가 움직여야 걸리는데 몇 분
+    # 안에 1%씩 움직이는 종목은 없고, 보유 상한 30분은 시연 시간(수 분)
+    # 보다 길다. 그래서 '활발한 매매' 를 켰는데 화면에는 매수만 쌓였다.
+    # 시연에서 매도를 실제로 보이게 하는 유일한 레버가 보유 상한이다.
+    "max_hold_hours": 0.05,      # 3분
+    "max_trades_per_day": 40,    # 기본 5
+    "min_confidence": 0.55,      # 기본 0.8 — 더 자주 매수까지 간다
+}
+# 되돌릴 때 쓸 기본값. Rulebook 의 필드 기본값과 같아야 한다.
+CALM = {
+    "take_profit_pct": 5.0,
+    "stop_loss_pct": 3.0,
+    "max_hold_hours": 24.0,
+    "max_trades_per_day": 5,
+    "min_confidence": 0.8,
+}
+SCALP_INTERVAL = 45              # 단기 모드 주기(초). 기본은 300.
+
+
+@router.get("/runtime")
+async def runtime(session: str = Depends(session_id)):
+    """봇이 지금 도는가. 목업 위 상태 램프가 이걸 폴링한다."""
+    from app.core.scheduler import SCHEDULER
+
+    mine = _my_bots(session)
+    active = [b for b in mine if not b.killed]
+    st = SCHEDULER.status()
+    # 룰북이 단기 설정이면 그렇게 표시한다. 하나라도 다르면 꺼진 것으로
+    # 본다 — '반쯤 켜짐' 을 켜졌다고 하면 화면이 거짓말을 한다.
+    scalp = bool(active) and all(
+        b.rulebook.max_hold_hours <= SCALP["max_hold_hours"]
+        and b.rulebook.take_profit_pct <= SCALP["take_profit_pct"]
+        for b in active)
+    # 단기 모드는 주기가 짧아야 뜻이 있다. 보유 상한이 3분인데 5분마다
+    # 돌면 청산이 항상 늦어서, 화면에는 '3분 지난 포지션' 만 쌓인다.
+    if scalp and SCHEDULER.running and SCHEDULER.interval > SCALP_INTERVAL:
+        SCHEDULER.interval = SCALP_INTERVAL
+    return {
+        "running": st["running"] and bool(active),
+        "scheduler_running": st["running"],
+        "interval_seconds": st["interval_seconds"],
+        "next_tick_in": st["next_tick_in"],
+        "ticks": st["ticks"],
+        "uptime_seconds": st["uptime_seconds"],
+        "bots": len(mine),
+        "active_bots": len(active),
+        "paused_bots": len(mine) - len(active),
+        "scalp": scalp,
+        # 최근 활동 몇 줄. 램프에 마우스를 올렸을 때 뭘 하고 있었는지.
+        "recent": [
+            {"who": e["who"], "event": e["event"], "ts": e["ts"]}
+            for e in SCHEDULER.log[-5:]
+        ],
+    }
+
+
+@router.post("/runtime/scheduler")
+async def runtime_scheduler(on: bool = True, interval_seconds: int | None = None,
+                            _: None = Depends(require_admin),
+                            session: str = Depends(session_id)):
+    """상태 램프의 켜기/끄기. /scheduler/start·stop 과 같은 스위치다.
+
+    끌 때 봇의 killed 는 건드리지 않는다. 스케줄러를 멈추는 것과 봇을
+    정지시키는 것은 다른 일이고, 섞으면 다시 켰을 때 무엇이 살아나는지
+    예측할 수 없게 된다.
+    """
+    from app.core.scheduler import SCHEDULER
+
+    if not on:
+        OWNER_LOG.add("scheduler", session=session, detail="자동매매 정지")
+        return {**SCHEDULER.stop(), **(await runtime(session))}
+
+    # 켤 때는 이 세션의 봇 중 정지된 것을 되살린다 — 램프를 켰는데
+    # 아무 봇도 안 도는 상황이 제일 헷갈린다.
+    woke = []
+    for b in _my_bots(session):
+        if b.killed:
+            b.killed = False
+            b.tracker.policy.killed = False
+            SCHEDULER.errors.pop(b.bot_id, None)
+            woke.append(b.bot_id)
+    if woke:
+        from app.core import store as STORE_
+        STORE_.save()
+
+    SCHEDULER.start(interval_seconds or SCHEDULER.interval)
+    OWNER_LOG.add("scheduler", session=session,
+                  detail=f"자동매매 시작 (주기 {SCHEDULER.interval}초)"
+                         + (f", 봇 {len(woke)}개 재개" if woke else ""))
+    return {"woke": woke, **(await runtime(session))}
+
+
+@router.post("/runtime/scalp")
+async def runtime_scalp(on: bool = True,
+                        _: None = Depends(require_admin),
+                        session: str = Depends(session_id)):
+    """단기 매매 모드. 이 세션의 봇 전부에 얕은 익절·손절을 적용한다.
+
+    룰북을 바꾸는 일이라 **무엇이 바뀌었는지 그대로 돌려준다.** 사용자가
+    정한 값을 우리가 조용히 갈아치우면 그 뒤의 매매 결과를 해석할 수 없다.
+    끄면 Rulebook 기본값으로 되돌린다 — 사용자가 직접 손댄 값이 있었다면
+    그것도 같이 덮으므로, 화면에서 그 사실을 밝힌다.
+    """
+    from app.core import store as STORE_
+    from app.core.scheduler import SCHEDULER
+
+    preset = SCALP if on else CALM
+    changed = []
+    for b in _my_bots(session):
+        before = {k: getattr(b.rulebook, k) for k in preset}
+        for k, v in preset.items():
+            setattr(b.rulebook, k, v)
+        changed.append({"bot_id": b.bot_id, "before": before, "after": dict(preset)})
+    STORE_.save()
+
+    # 주기도 같이 바꾼다. 30분 보유 상한인데 5분마다 돌면 청산이 늦다.
+    if SCHEDULER.running:
+        SCHEDULER.interval = SCALP_INTERVAL if on else 300
+    OWNER_LOG.add("scheduler", session=session,
+                  detail=("단기 매매 모드 켬" if on else "단기 매매 모드 끔")
+                         + f" (봇 {len(changed)}개)")
+    return {"scalp": on, "changed": changed,
+            "interval_seconds": SCHEDULER.interval,
+            **(await runtime(session))}
+
+
 
 
 # ══════ 홈 ═════════════════════════════════════════════════════════
@@ -786,18 +939,53 @@ def _parse_order(message: str, bot) -> dict | None:
     그래서 지시 해석은 서버가 한다. 모델의 action 은 금액·종목을 보태는
     보조 재료로만 쓴다.
     """
+    orders = _parse_orders(message, bot)
+    return orders[0] if orders else None
+
+
+# "총 300달러" · "합쳐서" · "나눠서" — 금액을 종목 수로 쪼개라는 뜻.
+SPLIT_WORDS = ("총", "합쳐", "합해", "나눠", "나누어", "분산", "골고루", "균등")
+
+
+def _parse_orders(message: str, bot) -> list[dict]:
+    """사용자의 말에서 주문을 **전부** 읽는다. 지시가 아니면 빈 목록.
+
+    [여러 종목 — 2026-08-03]
+    예전에는 `find_tickers` 가 목록을 돌려주는데도 `found[0]` 만 썼다.
+    그래서 "엔비디아 테슬라 애플 사줘" 는 엔비디아 하나만 사고 끝났다.
+    사용자는 셋 다 샀다고 생각하는데 실제로는 하나였다 — 조용히 덜
+    실행되는 것이 실패보다 나쁘다. 이제 찾은 종목마다 주문을 만든다.
+
+    [금액을 어떻게 나누나]
+    "각 100달러씩" 과 "총 300달러" 는 다른 말이다. 그런데 대부분의 사람은
+    금액 하나만 말한다. 기본은 **종목당** 으로 읽고, 총액·합쳐서·나눠서
+    같은 말이 있을 때만 종목 수로 쪼갠다. 어느 쪽으로 읽었는지는 집행
+    결과 문장에 그대로 적어서, 사용자가 오해한 채로 넘어가지 않게 한다.
+    """
     said_buy = any(w in message for w in BUY_WORDS)
     said_sell = any(w in message for w in SELL_WORDS)
     if not (said_buy or said_sell):
-        return None
+        return []
     # "살까?" 처럼 묻기만 하는 말이면 지시가 아니다.
     if any(w in message for w in ASK_WORDS) and not (said_buy or said_sell):
-        return None
+        return []
 
+    side = "sell" if said_sell else "buy"
     found = MARKETS_.find_tickers(message)
-    return {"side": "sell" if said_sell else "buy",
-            "ticker": found[0] if found else "",
-            "amount_usd": _parse_amount(message)}
+    amount = _parse_amount(message)
+
+    if not found:
+        # 종목을 못 찾았어도 주문 의사는 분명하다. 한 건으로 올려보내고
+        # 종목 판별은 _execute_one 이 모델 action 까지 봐서 마저 한다.
+        return [{"side": side, "ticker": "", "amount_usd": amount,
+                 "of": 1, "index": 1}]
+
+    # 금액을 쪼갤지 결정한다. 종목이 하나뿐이면 쪼갤 것도 없다.
+    split = len(found) > 1 and any(w in message for w in SPLIT_WORDS)
+    each = (amount / len(found)) if split else amount
+    return [{"side": side, "ticker": t, "amount_usd": each,
+             "of": len(found), "index": i + 1, "split": split}
+            for i, t in enumerate(found)]
 
 
 def _parse_amount(message: str) -> float:
@@ -830,26 +1018,39 @@ async def _execute_order(bot, action: dict, message: str):
     지시하는 말이 있어야 한다. 모델이 "살까?" 를 매수 지시로 읽는 순간
     돈이 움직이면, 그건 사용자가 의도한 적 없는 체결이다.
     """
-    from app.main import manual_buy, manual_sell
-
-    # 서버가 읽은 지시가 우선이다. 모델의 action 은 종목·금액을 보탤 때만 쓴다.
     parsed = _parse_order(message, bot)
     if parsed is None:
         return None, ("(주문으로 실행하려면 '사줘' · '팔아' 처럼 분명히 "
                       "말씀해 주세요. 지금은 의견만 드렸습니다.)")
+    return await _execute_one(bot, parsed, action, message)
 
+
+async def _execute_one(bot, parsed: dict, action: dict | None, message: str):
+    """주문 **한 건**을 집행한다. (결과, 사용자에게 덧붙일 문장)
+
+    parsed 는 _parse_orders 가 읽어둔 한 건이다. 여러 종목 주문은
+    이 함수를 종목 수만큼 부른다 — 한 건이 실패해도 나머지는 계속
+    간다. 세 종목 중 하나가 잔고 부족이라고 나머지 둘까지 취소하면,
+    사용자는 왜 아무것도 안 샀는지 알 수 없다.
+    """
+    from app.main import manual_buy, manual_sell
+
+    # 서버가 읽은 지시가 우선이다. 모델의 action 은 종목·금액을 보탤 때만 쓴다.
     action = {
         "side": parsed["side"],
         "ticker": parsed["ticker"] or (action or {}).get("ticker", ""),
         "amount_usd": parsed["amount_usd"] or (action or {}).get("amount_usd", 0),
     }
+    # 여러 건 중 몇 번째인지. 한 건짜리 주문에는 안 붙는다.
+    tag = (f"[{parsed['index']}/{parsed['of']}] "
+           if parsed.get("of", 1) > 1 else "")
 
     raw = (action.get("ticker") or "").strip()
     # 모델이 회사 이름으로 답할 수도 있다. 우리 카탈로그에서 되찾는다.
     found = MARKETS_.find_tickers(raw) or MARKETS_.find_tickers(message)
     base = found[0] if found else (raw[:-1] if raw.endswith("x") else raw)
     if not base:
-        return None, "(어느 종목인지 알 수 없어 실행하지 않았습니다.)"
+        return None, f"{tag}(어느 종목인지 알 수 없어 실행하지 않았습니다.)"
 
     allowed = {t[:-1] if t.endswith("x") else t
                for t in bot.rulebook.allowed_tickers}
@@ -860,7 +1061,7 @@ async def _execute_order(bot, action: dict, message: str):
             r = await manual_sell(bot, ticker, message)
             pnl = sum((x.get("realized_pnl") or 0) for x in r["results"]
                       if isinstance(x, dict))
-            return r, (f"✅ 지시대로 {MARKETS_.company(base)} 전량 매도했습니다 — "
+            return r, (f"{tag}✅ 지시대로 {MARKETS_.company(base)} 전량 매도했습니다 — "
                        f"{r['closed']}건 청산, 실현손익 {pnl / USDC:+,.2f} USDC.")
 
         # 매수 — 금액을 안 말했으면 1회 최대 투입의 절반으로 잡는다.
@@ -871,15 +1072,80 @@ async def _execute_order(bot, action: dict, message: str):
         extra = ("" if base in allowed else
                  f" (참고: {MARKETS_.company(base)}는 이 봇의 룰북 목록 밖입니다 — "
                  f"직접 지시하셔서 실행했습니다.)")
-        return r, (f"✅ 지시대로 {MARKETS_.company(base)} "
+        # 금액을 종목 수로 쪼갰으면 그렇게 읽었다고 밝힌다. 사용자가
+        # "총 300" 이라고 했는지 "각 300" 이라고 했는지는 우리 해석이고,
+        # 해석을 감추면 900달러가 나간 뒤에야 알게 된다.
+        if parsed.get("split"):
+            extra += f" (총액을 {parsed['of']}종목으로 나눠 집행했습니다.)"
+        return r, (f"{tag}✅ 지시대로 {MARKETS_.company(base)} "
                    f"{r['qty']:.6f}주를 ${r['price_usd']:,.2f}에 매수했습니다"
                    f" (총 ${r['size_usd']:,.2f}).{extra}")
     except HTTPException as e:
         d = e.detail if isinstance(e.detail, dict) else {"error": str(e.detail)}
-        return None, f"⚠️ 실행하지 못했습니다 — {d.get('error')} {d.get('hint', '')}".strip()
+        return None, (f"{tag}⚠️ {MARKETS_.company(base)} 실행하지 못했습니다 — "
+                      f"{d.get('error')} {d.get('hint', '')}").strip()
     except Exception as e:                                # noqa: BLE001
         print(f"  ⚠️ 수동 주문 실패: {type(e).__name__}: {str(e)[:120]}")
-        return None, f"⚠️ 실행 중 오류가 났습니다 ({type(e).__name__})."
+        return None, f"{tag}⚠️ 실행 중 오류가 났습니다 ({type(e).__name__})."
+
+
+async def _maybe_execute_chat_order(bot, action: dict | None, message: str):
+    """대화에 주문이 들어 있으면 집행하고 **구조화된** 결과를 함께 돌려준다.
+
+    돌려주는 것: (trade, order, note)
+
+    [왜 order 를 따로 만드나 — 2026-08-03]
+    예전에는 집행 결과가 `note` 문자열로만 나왔고, 그건 답변 문장 뒤에
+    이어붙여져 대화창에만 남았다. 그래서 오른쪽 **실행 로그에는 아무것도
+    안 떴다** — 사용자는 "사줘" 라고 했고 봇은 실제로 샀는데, 화면의
+    기록에는 그 사건이 존재하지 않았다. [지금 일해보기] 로 산 것만 로그에
+    보이니 "대화로 시킨 건 안 먹혔나?" 로 읽힌다.
+
+    order 는 집행 여부(executed)와 사유(note)를 구조로 들고 있어서
+    화면이 그대로 한 줄 찍을 수 있다. 실패한 주문도 로그에 남는다 —
+    안 된 이유가 안 보이는 것이 안 된 것보다 나쁘다.
+    """
+    orders = _parse_orders(message, bot)
+    if not (action or orders):
+        return None, None, None          # 주문이 아니다. 그냥 대화.
+
+    if not orders:
+        # 모델만 action 을 냈다. 종목을 모르는 한 건으로 취급한다.
+        orders = [{"side": (action or {}).get("side", "buy"), "ticker": "",
+                   "amount_usd": 0, "of": 1, "index": 1}]
+
+    # 종목마다 따로 집행한다. **한 건이 실패해도 멈추지 않는다** — 세 종목
+    # 중 하나가 잔고 부족이라고 나머지를 취소하면, 사용자는 왜 아무것도
+    # 안 샀는지 알 수 없다. 각각의 성패를 그대로 모아 보고한다.
+    trades, notes, legs = [], [], []
+    for one in orders:
+        trade, note = await _execute_one(bot, one, action, message)
+        if trade is not None:
+            trades.append(trade)
+        if note:
+            notes.append(note)
+        legs.append({"ticker": one.get("ticker") or "?",
+                     "side": one.get("side"),
+                     "executed": trade is not None,
+                     "note": note or ""})
+
+    order = {
+        "executed": bool(trades),
+        "note": "\n".join(notes),
+        "side": orders[0].get("side"),
+        "ticker": ", ".join(o.get("ticker") or "?" for o in orders),
+        "instruction": message[:80],
+        # 여러 종목이면 건별 성패를 그대로 싣는다. 화면이 이걸로 몇 건
+        # 중 몇 건이 됐는지 한 줄에 보여준다.
+        "legs": legs,
+        "requested": len(orders),
+        "filled": len(trades),
+    }
+    # 답변에 붙일 문장. 여러 건이면 앞에 요약 한 줄을 세운다.
+    note_text = "\n".join(notes)
+    if len(orders) > 1:
+        note_text = f"주문 {len(orders)}건 중 {len(trades)}건 체결.\n{note_text}"
+    return (trades[0] if len(trades) == 1 else (trades or None)), order, note_text
 
 
 OFF_TOPIC_REPLY = (
@@ -1076,14 +1342,13 @@ async def bot_chat(bot_id: str, req: ChatRequest,
                 model=model_id(prof.model),
                 history=[t.model_dump() for t in req.history])
             reply = out["reply"] if out["on_topic"] else OFF_TOPIC_REPLY
-            trade = None
+            trade = order = None
             # 모델이 action 을 안 냈어도 사용자가 분명히 지시했으면 집행한다.
             # 모델이 "제 운용 원칙에 맞지 않습니다" 라며 주문을 거절한 적이
             # 있는데, 주문은 모델이 판단할 일이 아니다(_parse_order 주석).
-            if out["on_topic"] and (out.get("action")
-                                    or _parse_order(req.message, bot)):
-                trade, note = await _execute_order(
-                    bot, out.get("action") or {}, req.message)
+            if out["on_topic"]:
+                trade, order, note = await _maybe_execute_chat_order(
+                    bot, out.get("action"), req.message)
                 if note and trade:
                     # 집행됐으면 결과를 **먼저** 보여준다. 봇의 의견이 앞에
                     # 오면 "매수는 지양하겠습니다 … ✅ 매수했습니다" 처럼
@@ -1099,6 +1364,7 @@ async def bot_chat(bot_id: str, req: ChatRequest,
             return {"reply": reply,
                     "source": out["model"], "on_topic": out["on_topic"],
                     "news_tickers": news_tickers, "trade": trade,
+                    "order": order,
                     "grounded": facts, "suggestions": SUGGESTIONS}
         except Exception as e:                        # noqa: BLE001
             print(f"  ⚠️ 챗 Gemini 실패: {str(e)[:90]} → 상태 기반 응답 사용")
@@ -1113,6 +1379,23 @@ async def bot_chat(bot_id: str, req: ChatRequest,
 
     grounded = await _answer_from_state(bot, req.message)
 
+    # 모델을 못 불러도 **주문은 집행한다.**
+    #
+    # [빠져 있던 것 — 2026-08-03] 주문 집행이 위쪽 gemini_byok 블록 안에만
+    # 있었다. 그래서 키가 없거나 429·타임아웃이 나면 "NVDA 사줘" 가 조용히
+    # 그냥 질문이 됐다 — 답변은 멀쩡히 오니까 사용자는 실행된 줄 안다.
+    # _parse_order 는 순수한 서버 코드고 Gemini 와 아무 상관이 없다.
+    # 주문이 외부 서비스의 가용성에 달려 있으면 그건 주문 접수가 아니다.
+    trade, order, note = await _maybe_execute_chat_order(bot, None, req.message)
+
+    def _with_note(text: str) -> str:
+        """집행됐으면 결과를 먼저, 아니면 답변 뒤에 사유를 붙인다.
+        (위쪽 gemini_byok 경로와 같은 규칙 — 순서가 다르면 읽는 사람이
+         같은 화면에서 다른 관습을 두 번 배워야 한다.)"""
+        if not note:
+            return text
+        return f"{note}\n\n{text}" if trade else f"{text}\n\n{note}"
+
     if gemini_live.enabled():
         prompt = (
             f"당신은 사용자의 자동매매 봇 '{prof.display_name or bot_id}'입니다.\n"
@@ -1125,18 +1408,21 @@ async def bot_chat(bot_id: str, req: ChatRequest,
         try:
             text = await gemini_live.converse_async(prompt)
             OWNER_LOG.add("chat", session=session, bot_id=bot_id,
-                          name=prof.display_name, detail=req.message[:60])
-            return {"reply": text.strip(), "source": "gemini-live",
+                          name=prof.display_name,
+                          detail=req.message[:60] + (" → 주문 체결" if trade else ""))
+            return {"reply": _with_note(text.strip()), "source": "gemini-live",
                     "on_topic": True, "grounded": grounded,
+                    "trade": trade, "order": order,
                     "suggestions": SUGGESTIONS}
         except Exception as e:                        # noqa: BLE001
             print(f"  ⚠️ 챗 Gemini 실패: {str(e)[:90]} → 상태 기반 응답 사용")
 
     OWNER_LOG.add("chat", session=session, bot_id=bot_id,
                   name=prof.display_name,
-                  detail=req.message[:60] + " (원장 기반 응답)")
-    return {"reply": grounded, "source": "state", "on_topic": True,
-            "suggestions": SUGGESTIONS}
+                  detail=req.message[:60] + " (원장 기반 응답)"
+                         + (" → 주문 체결" if trade else ""))
+    return {"reply": _with_note(grounded), "source": "state", "on_topic": True,
+            "trade": trade, "order": order, "suggestions": SUGGESTIONS}
 
 
 # ══════ 봇 삭제 ═══════════════════════════════════════════════════

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import bezel from '../assets/iphone-frame.png'
+import { StatusLamp } from './StatusLamp'
 import s from './DeviceFrame.module.css'
 
 /**
@@ -55,6 +56,10 @@ function layoutFor(aside: boolean): 'row' | 'stack' | 'bare' {
   return window.innerWidth >= ROW_MIN_W ? 'row' : 'stack'
 }
 
+/* 기기 위에 얹히는 상태 램프가 차지하는 세로. 이만큼 빼고 기기를 맞춰야
+   램프가 화면 위로 잘리지 않는다 (막대 높이 + column 의 gap). */
+const LAMP_H = 56
+
 function fitScale(mode: 'row' | 'stack', aside: boolean) {
   const pad = 32
   const room =
@@ -64,7 +69,7 @@ function fitScale(mode: 'row' | 'stack', aside: boolean) {
   // 폰이 알아볼 수 없을 만큼 줄어드는 것보다는 조금 좁아지는 편이 낫다.
   return Math.min(
     1,
-    (window.innerHeight - pad) / DEVICE_H,
+    (window.innerHeight - pad - LAMP_H) / DEVICE_H,
     Math.max(room, DEVICE_W * 0.62) / DEVICE_W,
   )
 }
@@ -104,6 +109,7 @@ export function DeviceFrame({
   if (mode === 'bare') {
     return (
       <div className={s.bare}>
+        <StatusLamp />
         {children}
         {aside}
       </div>
@@ -112,33 +118,46 @@ export function DeviceFrame({
 
   return (
     <div className={s.stage} data-mode={mode}>
-      <div
-        className={s.device}
-        style={{
-          width: DEVICE_W,
-          height: DEVICE_H,
-          transform: `scale(${scale})`,
-          // scale 은 레이아웃 크기를 바꾸지 않는다. 줄어든 만큼 옆에
-          // 빈 공간이 남아 패널이 멀찍이 떨어져 보이므로 실제 폭을 준다.
-          marginRight: mode === 'row' && hasAside
-            ? -(DEVICE_W * (1 - scale))
-            : undefined,
-        }}
-      >
+      {/* 기기와 램프를 한 기둥으로 묶는다. scale 이 device 에만 걸리므로
+          이 기둥의 폭은 축소된 기기 폭에 맞춰 따로 준다 — 안 그러면
+          램프만 원래 크기로 남아 기기보다 넓어진다. */}
+      <div className={s.column} style={{ width: DEVICE_W * scale }}>
+        <StatusLamp />
+        {/* 축소된 실제 크기를 차지하는 상자.
+            transform:scale 은 **레이아웃 크기를 바꾸지 않는다** — 기기는
+            작아 보여도 자리는 원래 크기만큼 차지한다. 예전에는 그 남는
+            자리를 음수 marginRight 로 상쇄했는데, 램프가 생기면서 세로
+            남는 자리까지 문제가 됐다. 상자에 축소된 크기를 직접 주고
+            안쪽을 top-left 기준으로 줄이면 가로·세로가 한 번에 맞는다. */}
         <div
-          className={s.screen}
-          style={{
-            left: SCREEN_X,
-            top: SCREEN_Y,
-            width: SCREEN_W,
-            height: SCREEN_H,
-          }}
+          className={s.deviceBox}
+          style={{ width: DEVICE_W * scale, height: DEVICE_H * scale }}
         >
-          {children}
+          <div
+            className={s.device}
+            style={{
+              width: DEVICE_W,
+              height: DEVICE_H,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            <div
+              className={s.screen}
+              style={{
+                left: SCREEN_X,
+                top: SCREEN_Y,
+                width: SCREEN_W,
+                height: SCREEN_H,
+              }}
+            >
+              {children}
+            </div>
+            {/* 베젤은 앱 위에 얹힌다. 구멍이 투명이라 앱이 그대로 비쳐 보이고,
+                pointer-events:none 이라 클릭은 전부 앱으로 지나간다. */}
+            <img className={s.bezel} src={bezel} alt="" aria-hidden />
+          </div>
         </div>
-        {/* 베젤은 앱 위에 얹힌다. 구멍이 투명이라 앱이 그대로 비쳐 보이고,
-            pointer-events:none 이라 클릭은 전부 앱으로 지나간다. */}
-        <img className={s.bezel} src={bezel} alt="" aria-hidden />
       </div>
       {aside}
     </div>

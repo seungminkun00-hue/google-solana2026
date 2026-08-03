@@ -22,10 +22,27 @@
   overflow: visible;
 }
 
+/* [램프 + 기기] 한 기둥. 폭은 축소된 기기 폭에 맞춰 TSX 가 직접 준다. */
+.column {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+/* 축소 뒤의 실제 자리를 차지하는 상자. 안쪽 .device 는 원래 크기 그대로
+   두고 transform 으로만 줄이므로, 이 상자가 없으면 남는 여백이 그대로
+   레이아웃에 남는다. */
+.deviceBox {
+  position: relative;
+  flex: none;
+}
+
 .device {
   position: relative;
   flex: none;
-  transform-origin: center center;
+  transform-origin: top left;
 }
 
 .screen {
@@ -51,6 +68,9 @@
 }
 
 /* 목업을 붙이지 않는 좁은 화면(실제 폰) */
+/* 실제 폰. 목업이 없으므로 램프는 화면 맨 위에 띠로 붙는다.
+   여기서도 '지금 돌고 있는가' 는 보여야 한다 — 데스크톱에서만 보이는
+   상태 표시는 절반만 만든 기능이다. */
 .bare {
   width: 100%;
   min-height: 100svh;
