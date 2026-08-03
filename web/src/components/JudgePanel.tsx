@@ -38,6 +38,48 @@ function short(addr: string | null | undefined): string {
   return `${addr.slice(0, 4)}…${addr.slice(-4)}`
 }
 
+/**
+ * 위임이 온체인에 실제로 보일 때까지 기다린다.
+ *
+ * [왜 필요한가 — 2026-08-03]
+ * 팬텀의 signAndSendTransaction 은 트랜잭션을 **보낸 순간** 서명을
+ * 돌려준다. 확정(confirmed)을 기다려주지 않는다. 그런데 서버의
+ * /judge/status 는 토큰 계정을 confirmed 로 읽으므로, 서명 직후에
+ * 물어보면 아직 위임이 없다고 답한다. 그 답이 화면에 굳으면
+ * ③ 은 '현재 위임: 없음' 이고 ④·입금은 잠긴 채로 남는다.
+ *
+ * 그래서 심사위원 눈에는 "한 번 서명했는데 아무 일도 안 일어나고,
+ * 다시 눌러 서명해야 위임이 된다" 로 보였다. 실제로는 첫 서명이
+ * 이미 성공했고, 두 번째를 누르는 동안 흐른 시간 덕에 첫 번째가
+ * 확정되어 그때 화면이 따라잡은 것뿐이다. 트랜잭션은 두 번 나갔다.
+ *
+ * 한도가 아니라 `=== amount` 로 본다. 이전 위임이 남아 있으면
+ * `> 0` 은 옛 값을 보고 곧바로 통과해 같은 고장이 재발한다.
+ */
+async function waitForDelegate(
+  delegate: string,
+  amount: number,
+  timeoutMs = 30_000,
+): Promise<JudgeStatus> {
+  const deadline = Date.now() + timeoutMs
+  let last: JudgeStatus | null = null
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1_000))
+    try {
+      last = await judgeApi.status()
+      if (last.delegate === delegate && last.allowance === amount) return last
+    } catch {
+      // 조회 실패는 위임 실패가 아니다. devnet 공용 RPC 는 429 를
+      // 자주 던진다 — 여기서 포기하면 성공한 서명을 실패로 만든다.
+    }
+  }
+  throw new Error(
+    '서명은 보냈지만 체인에서 위임이 확인되지 않았습니다. ' +
+      '팬텀이 devnet 인지 확인하고, 잠시 뒤 이 화면의 「현재 위임」 이 ' +
+      '갱신되는지 보세요 (다시 서명하면 트랜잭션이 두 번 나갑니다).',
+  )
+}
+
 type Phase = 'idle' | 'busy'
 
 export function JudgePanel() {
@@ -105,8 +147,14 @@ export function JudgePanel() {
     }
   }, [])
 
+  // ⚠️ 폴링이어야 한다. 위임은 팬텀이 서명한 **뒤에도** 몇 초 지나야
+  //    체인에 안착한다. 동작 직후 한 번만 읽으면 그 몇 초를 '위임 없음'
+  //    으로 굳혀버리고, 화면은 영영 스스로 고쳐지지 않는다 —
+  //    "위임을 두 번 눌러야 된다" 의 정체가 이것이었다.
   useEffect(() => {
     refresh()
+    const t = setInterval(refresh, 4_000)
+    return () => clearInterval(t)
   }, [refresh])
 
   // 스트림이 열린 채로 화면을 떠나면 백엔드 제너레이터가 남는다.
@@ -183,8 +231,16 @@ export function JudgePanel() {
         setAddrInput(addr)
         setStatus(await judgeApi.register(addr))
       }
-      const { transaction } = await judgeApi.approveTx(botId, allowance * USDC)
+      const { transaction, delegate } = await judgeApi.approveTx(
+        botId,
+        allowance * USDC,
+      )
       const sig = await signAndSend(transaction)
+      setNote(`서명됨 · ${short(sig)} — 체인 확정을 기다리는 중…`)
+      // 여기서 기다리지 않으면 아래 4단계가 잠긴 채로 남는다. 자세한
+      // 이유는 waitForDelegate 주석.
+      const st = await waitForDelegate(delegate, allowance * USDC)
+      setStatus(st)
       setNote(`위임 완료 · ${short(sig)} — 이제 추가 서명 없이 결제됩니다`)
     })
 
